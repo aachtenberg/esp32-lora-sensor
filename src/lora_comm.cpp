@@ -15,6 +15,7 @@ static int8_t lastSNR = 0;
 static uint16_t sequenceNumber = 0;
 static uint64_t deviceId = 0;
 static bool loraInitialized = false;
+static bool restartRequested = false;  // Flag for device restart command
 
 /**
  * Initialize LoRa radio (SX1262)
@@ -363,9 +364,9 @@ bool processCommand(CommandPayload* cmd) {
         
         case CMD_RESTART: {
             Serial.println("  ✓ Restart command received");
+            Serial.println("  Device will restart after command window closes");
+            restartRequested = true;
             success = true;
-            // TODO: Handle restart after ACK is sent
-            // esp_restart();
             break;
         }
         
@@ -425,4 +426,18 @@ int16_t getLastRSSI() {
  */
 int8_t getLastSNR() {
     return lastSNR;
+}
+
+/**
+ * Check if restart was requested via command
+ */
+bool isRestartRequested() {
+    return restartRequested;
+}
+
+/**
+ * Clear restart flag
+ */
+void clearRestartFlag() {
+    restartRequested = false;
 }

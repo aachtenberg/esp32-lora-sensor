@@ -143,6 +143,14 @@ void loop() {
         // Commands are processed in checkForCommands()
     }
 
+    // Check if restart was requested
+    if (isRestartRequested()) {
+        Serial.println("\n🔄 RESTARTING DEVICE...");
+        Serial.flush();
+        delay(500);
+        ESP.restart();
+    }
+
     // Print status
     Serial.println("\n--- Wake Cycle Complete ---");
     Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());

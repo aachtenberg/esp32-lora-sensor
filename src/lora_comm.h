@@ -30,4 +30,10 @@ int16_t getLastRSSI();
 // Get SNR of last transmission
 int8_t getLastSNR();
 
+// Check if restart was requested via command
+bool isRestartRequested();
+
+// Clear restart flag
+void clearRestartFlag();
+
 #endif // LORA_COMM_H
