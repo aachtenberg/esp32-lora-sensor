@@ -21,6 +21,12 @@ uint32_t getDeepSleepSeconds();
 // Set deep sleep interval (persists to LittleFS)
 void setDeepSleepSeconds(uint32_t seconds);
 
+// Get sensor interval in seconds
+uint32_t getSensorIntervalSeconds();
+
+// Set sensor interval (persists to LittleFS)
+void setSensorIntervalSeconds(uint32_t seconds);
+
 // Get pressure baseline in hPa
 float getConfigPressureBaseline();
 

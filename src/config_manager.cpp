@@ -4,11 +4,13 @@
 // Configuration variables
 static String deviceName = "ESP32-LoRa";
 static uint32_t deepSleepSeconds = 900;  // 15 minutes default
+static uint32_t sensorIntervalSeconds = 30;  // 30 seconds default
 static float pressureBaseline = 0.0;
 
 // File paths in LittleFS
 static const char* DEVICE_NAME_FILE = "/device_name.txt";
 static const char* DEEP_SLEEP_FILE = "/deep_sleep_seconds.txt";
+static const char* SENSOR_INTERVAL_FILE = "/sensor_interval.txt";
 static const char* PRESSURE_BASELINE_FILE = "/pressure_baseline.txt";
 
 /**
@@ -76,6 +78,23 @@ bool loadConfig() {
         allSuccess = false;
     }
     
+    // Load sensor interval
+    if (LittleFS.exists(SENSOR_INTERVAL_FILE)) {
+        File file = LittleFS.open(SENSOR_INTERVAL_FILE, "r");
+        if (file) {
+            String value = file.readStringUntil('\n');
+            sensorIntervalSeconds = value.toInt();
+            file.close();
+            Serial.println("✅ Loaded sensor interval: " + String(sensorIntervalSeconds) + " seconds");
+        } else {
+            Serial.println("⚠️  Failed to open sensor_interval.txt");
+            allSuccess = false;
+        }
+    } else {
+        Serial.println("⚠️  sensor_interval.txt not found, using default");
+        allSuccess = false;
+    }
+    
     // Load pressure baseline
     if (LittleFS.exists(PRESSURE_BASELINE_FILE)) {
         File file = LittleFS.open(PRESSURE_BASELINE_FILE, "r");
@@ -121,6 +140,17 @@ bool saveConfig() {
         Serial.println("✅ Saved deep sleep interval");
     } else {
         Serial.println("❌ Failed to save deep sleep interval");
+        allSuccess = false;
+    }
+    
+    // Save sensor interval
+    file = LittleFS.open(SENSOR_INTERVAL_FILE, "w");
+    if (file) {
+        file.println(sensorIntervalSeconds);
+        file.close();
+        Serial.println("✅ Saved sensor interval");
+    } else {
+        Serial.println("❌ Failed to save sensor interval");
         allSuccess = false;
     }
     
@@ -184,6 +214,30 @@ void setDeepSleepSeconds(uint32_t seconds) {
         Serial.println("✅ Deep sleep updated: " + String(deepSleepSeconds) + " seconds");
     } else {
         Serial.println("❌ Failed to save deep sleep interval");
+    }
+}
+
+/**
+ * Get sensor interval in seconds
+ */
+uint32_t getSensorIntervalSeconds() {
+    return sensorIntervalSeconds;
+}
+
+/**
+ * Set sensor interval and persist to LittleFS
+ */
+void setSensorIntervalSeconds(uint32_t seconds) {
+    sensorIntervalSeconds = seconds;
+    
+    // Save to file
+    File file = LittleFS.open(SENSOR_INTERVAL_FILE, "w");
+    if (file) {
+        file.println(sensorIntervalSeconds);
+        file.close();
+        Serial.println("✅ Sensor interval updated: " + String(sensorIntervalSeconds) + " seconds");
+    } else {
+        Serial.println("❌ Failed to save sensor interval");
     }
 }
 

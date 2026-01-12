@@ -2,6 +2,7 @@
 #define LORA_COMM_H
 
 #include <Arduino.h>
+#include "lora_protocol.h"
 
 // Initialize LoRa radio
 // Returns true on success, false on failure
@@ -18,6 +19,10 @@ bool waitForAck(uint16_t timeout_ms);
 // Check for incoming commands from gateway
 // Returns true if command received and processed
 bool checkForCommands(uint16_t timeout_ms);
+
+// Process incoming command from gateway
+// Parses and applies command settings
+bool processCommand(CommandPayload* cmd);
 
 // Get RSSI of last transmission
 int16_t getLastRSSI();

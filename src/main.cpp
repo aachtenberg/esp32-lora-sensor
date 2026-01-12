@@ -136,9 +136,9 @@ void loop() {
 #endif
     }
 
-    // Check for incoming commands (brief listen period)
+    // Check for incoming commands from gateway
     Serial.println("Checking for commands...");
-    if (checkForCommands(1000)) {  // 1 second listen
+    if (checkForCommands(LORA_COMMAND_TIMEOUT_MS)) {
         Serial.println("Command received and processed");
         // Commands are processed in checkForCommands()
     }

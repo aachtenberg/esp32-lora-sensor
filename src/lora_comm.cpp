@@ -2,6 +2,7 @@
 #include "lora_config.h"
 #include "device_config.h"
 #include "lora_protocol.h"
+#include "config_manager.h"
 #include <RadioLib.h>
 #include <SPI.h>
 
@@ -287,9 +288,9 @@ bool checkForCommands(uint16_t timeout_ms) {
                                 CommandPayload* cmd = (CommandPayload*)(rxBuffer + sizeof(LoRaPacketHeader));
                                 Serial.printf("  📡 Command received: Type=0x%02X\n", cmd->cmdType);
                                 
-                                // TODO: Process command (will be implemented in main.cpp)
-                                // For now, just report that we received it
-                                return true;
+                                // Process command and return success/failure
+                                bool processed = processCommand(cmd);
+                                return processed;
                             }
                         } else {
                             Serial.printf("  ⚠️  Not a command (type: 0x%02X)\n", header->msgType);
@@ -308,6 +309,108 @@ bool checkForCommands(uint16_t timeout_ms) {
     
     Serial.println("⏱️  No commands received");
     return false;
+}
+
+/**
+ * Process incoming command from gateway
+ * Parses command type and parameters, applies settings
+ */
+bool processCommand(CommandPayload* cmd) {
+    if (!cmd) {
+        Serial.println("❌ Invalid command payload");
+        return false;
+    }
+    
+    Serial.printf("\n[COMMAND] Processing command type 0x%02X with %d param bytes\n", 
+                  cmd->cmdType, cmd->paramLen);
+    
+    bool success = false;
+    char paramStr[64] = "";
+    
+    // Extract parameter string (null-terminated)
+    if (cmd->paramLen > 0 && cmd->paramLen < sizeof(paramStr)) {
+        memcpy(paramStr, cmd->params, cmd->paramLen);
+        paramStr[cmd->paramLen] = '\0';
+        Serial.printf("  Parameters: %s\n", paramStr);
+    }
+    
+    switch (cmd->cmdType) {
+        case CMD_SET_SLEEP: {
+            // Set deep sleep interval (seconds)
+            int newSeconds = atoi(paramStr);
+            if (newSeconds >= 0 && newSeconds <= 3600) {  // 0-1 hour
+                Serial.printf("  ✓ Deep sleep interval set to %d seconds\n", newSeconds);
+                setDeepSleepSeconds(newSeconds);
+                success = true;
+            } else {
+                Serial.printf("  ❌ Invalid sleep value: %d (valid range: 0-3600)\n", newSeconds);
+            }
+            break;
+        }
+        
+        case CMD_SET_INTERVAL: {
+            // Set sensor read interval (seconds)
+            int newSeconds = atoi(paramStr);
+            if (newSeconds >= 5 && newSeconds <= 3600) {  // 5s - 1 hour
+                Serial.printf("  ✓ Sensor interval set to %d seconds\n", newSeconds);
+                setSensorIntervalSeconds(newSeconds);
+                success = true;
+            } else {
+                Serial.printf("  ❌ Invalid interval value: %d (valid range: 5-3600)\n", newSeconds);
+            }
+            break;
+        }
+        
+        case CMD_RESTART: {
+            Serial.println("  ✓ Restart command received");
+            success = true;
+            // TODO: Handle restart after ACK is sent
+            // esp_restart();
+            break;
+        }
+        
+        case CMD_STATUS: {
+            Serial.println("  ✓ Status request received");
+            // TODO: Send status packet immediately
+            success = true;
+            break;
+        }
+        
+        case CMD_CALIBRATE: {
+            Serial.println("  ✓ Pressure calibration command received");
+            // TODO: Call sensor manager to calibrate
+            success = true;
+            break;
+        }
+        
+        case CMD_CLEAR_BASELINE: {
+            Serial.println("  ✓ Clear pressure baseline command received");
+            // TODO: Call sensor manager to clear baseline
+            success = true;
+            break;
+        }
+        
+        case CMD_TIME_SYNC: {
+            Serial.println("  ✓ Time sync command received");
+            // Extract timestamp from params if provided
+            if (cmd->paramLen >= 4) {
+                uint32_t timestamp = *(uint32_t*)cmd->params;
+                Serial.printf("  Syncing to timestamp: %lu\n", timestamp);
+                // TODO: Set system time
+            }
+            success = true;
+            break;
+        }
+        
+        default:
+            Serial.printf("  ⚠️  Unknown command type: 0x%02X\n", cmd->cmdType);
+    }
+    
+    if (success) {
+        Serial.println("  ✅ Command processed successfully");
+    }
+    
+    return success;
 }
 
 /**
