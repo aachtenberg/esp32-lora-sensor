@@ -60,6 +60,7 @@ void setup() {
     // Initialize OLED display
     Serial.println("Initializing OLED display...");
     initDisplay();
+    setDisplayDeviceId(g_deviceId);
     displayStartup(getFirmwareVersion().c_str());
     delay(2000);
 #endif
@@ -150,6 +151,12 @@ void loop() {
         delay(500);
         ESP.restart();
     }
+
+    // Display configuration screen
+#ifdef OLED_ENABLED
+    displayConfig(getDeepSleepSeconds(), getSensorIntervalSeconds(), g_wakeCount);
+    delay(3000);  // Show config for 3 seconds
+#endif
 
     // Print status
     Serial.println("\n--- Wake Cycle Complete ---");

@@ -12,6 +12,7 @@ static U8G2_SSD1306_128X64_NONAME_F_HW_I2C* display = nullptr;
 // Display state
 static uint32_t txCount = 0;
 static int16_t lastRssi = 0;
+static uint64_t g_deviceId = 0;  // Device ID passed from main.cpp
 
 /**
  * Initialize OLED display
@@ -97,29 +98,33 @@ void displayReadings(const ReadingsPayload* readings) {
     if (display == nullptr || readings == nullptr) return;
     
     display->clearBuffer();
-    display->setFont(u8g2_font_6x10_tr);
+    display->setFont(u8g2_font_5x7_tf);
     
-    // Temperature
+    // Temperature (larger)
     char buffer[32];
-    snprintf(buffer, sizeof(buffer), "T: %.1fC", readings->temperature / 100.0);
-    display->drawStr(0, 10, buffer);
+    snprintf(buffer, sizeof(buffer), "T:%.1fC", readings->temperature / 100.0);
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(0, 11, buffer);
     
-    // Humidity
-    snprintf(buffer, sizeof(buffer), "H: %.1f%%", readings->humidity / 100.0);
-    display->drawStr(0, 22, buffer);
+    // Humidity and Pressure (small)
+    display->setFont(u8g2_font_5x7_tf);
+    snprintf(buffer, sizeof(buffer), "H:%.0f%% P:%.0fhPa", readings->humidity / 100.0, readings->pressure / 100.0);
+    display->drawStr(0, 21, buffer);
     
-    // Pressure
-    snprintf(buffer, sizeof(buffer), "P: %.0fhPa", readings->pressure / 100.0);
-    display->drawStr(0, 34, buffer);
+    // Battery voltage and percent
+    snprintf(buffer, sizeof(buffer), "Bat:%.2fV (%d%%)", readings->batteryVoltage / 1000.0, readings->batteryPercent);
+    display->drawStr(0, 31, buffer);
     
-    // Battery
-    snprintf(buffer, sizeof(buffer), "Bat: %.2fV (%d%%)", 
-             readings->batteryVoltage / 1000.0, readings->batteryPercent);
-    display->drawStr(0, 46, buffer);
-    
-    // TX count and RSSI
+    // TX status, RSSI, and wake count
     snprintf(buffer, sizeof(buffer), "TX:%lu RSSI:%d", txCount, lastRssi);
-    display->drawStr(0, 58, buffer);
+    display->drawStr(0, 41, buffer);
+    
+    // Device ID (truncated)
+    snprintf(buffer, sizeof(buffer), "ID:...%04llX", (unsigned long long)(g_deviceId & 0xFFFF));
+    display->drawStr(0, 51, buffer);
+    
+    // Status line (frequency or uptime)
+    display->drawStr(0, 61, "OK");
     
     display->sendBuffer();
 }
@@ -150,8 +155,46 @@ void displayError(const char* error) {
 }
 
 /**
- * Update TX statistics for display
+ * Set device ID for display
  */
+void setDisplayDeviceId(uint64_t deviceId) {
+    g_deviceId = deviceId;
+}
+
+/**
+ * Display configuration and status
+ */
+void displayConfig(uint32_t sleepSeconds, uint32_t intervalSeconds, uint32_t wakeCount) {
+    if (display == nullptr) return;
+    
+    display->clearBuffer();
+    display->setFont(u8g2_font_5x7_tf);
+    
+    char buffer[32];
+    
+    // Title
+    display->setFont(u8g2_font_ncenB08_tr);
+    display->drawStr(35, 12, "Config");
+    
+    // Settings
+    display->setFont(u8g2_font_5x7_tf);
+    snprintf(buffer, sizeof(buffer), "Sleep:%lds", sleepSeconds);
+    display->drawStr(0, 24, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Interval:%lds", intervalSeconds);
+    display->drawStr(0, 34, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Wake:%lu", wakeCount);
+    display->drawStr(0, 44, buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Heap:%lu KB", ESP.getFreeHeap() / 1024);
+    display->drawStr(0, 54, buffer);
+    
+    // Status indicator
+    display->drawStr(0, 64, "Ready");
+    
+    display->sendBuffer();
+}
 void updateTxStats(uint32_t count, int16_t rssi) {
     txCount = count;
     lastRssi = rssi;

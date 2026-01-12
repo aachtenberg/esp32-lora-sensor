@@ -13,6 +13,12 @@ void displayStartup(const char* version);
 // Display sensor readings
 void displayReadings(const ReadingsPayload* readings);
 
+// Display configuration and status
+void displayConfig(uint32_t sleepSeconds, uint32_t intervalSeconds, uint32_t wakeCount);
+
+// Set device ID for display
+void setDisplayDeviceId(uint64_t deviceId);
+
 // Display status message
 void displayStatus(const char* message);
 
