@@ -19,6 +19,9 @@ void displayStatus(const char* message);
 // Display error message
 void displayError(const char* error);
 
+// Update TX statistics for display
+void updateTxStats(uint32_t count, int16_t rssi);
+
 // Clear display
 void clearDisplay();
 

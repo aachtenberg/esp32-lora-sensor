@@ -5,7 +5,6 @@
 #include "lora_protocol.h"
 #include "sensor_manager.h"
 #include "lora_comm.h"
-#include "power_manager.h"
 #include "config_manager.h"
 
 #ifdef OLED_ENABLED
@@ -102,23 +101,39 @@ void loop() {
 
     if (txSuccess) {
         Serial.println("Transmission successful!");
+        
+        // Update display with TX stats
+#ifdef OLED_ENABLED
+        updateTxStats(g_sequenceNumber, getLastRSSI());
+        displayReadings(&readings);
+        delay(2000);  // Show results before sleep
+#endif
 
         // Wait for ACK from gateway (unless battery critical)
         if (readings.batteryPercent > BATTERY_CRITICAL_PERCENT) {
             Serial.println("Waiting for ACK...");
             if (waitForAck(LORA_ACK_TIMEOUT_MS)) {
                 Serial.println("ACK received!");
-                // TODO: Update RSSI/SNR from ACK
+#ifdef OLED_ENABLED
+                displayStatus("ACK OK!");
+                delay(1000);
+#endif
             } else {
                 Serial.println("No ACK received (timeout)");
-                // Not critical - gateway may have received packet anyway
+#ifdef OLED_ENABLED
+                displayStatus("No ACK");
+                delay(1000);
+#endif
             }
         } else {
             Serial.println("Battery critical - skipping ACK wait");
         }
     } else {
         Serial.println("ERROR: All transmission attempts failed!");
-        // TODO: Store packet in RTC memory for retry on next wake
+#ifdef OLED_ENABLED
+        displayError("TX Failed!");
+        delay(2000);
+#endif
     }
 
     // Check for incoming commands (brief listen period)
@@ -128,18 +143,14 @@ void loop() {
         // Commands are processed in checkForCommands()
     }
 
-    // Print status before sleep
+    // Print status
     Serial.println("\n--- Wake Cycle Complete ---");
     Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
     Serial.printf("RSSI: %d dBm\n", getLastRSSI());
-    Serial.printf("Next wake in: %d seconds\n", getDeepSleepSeconds());
+    Serial.printf("Next transmission in: %d seconds\n", 10);
 
-    // Enter deep sleep
-    Serial.println("Entering deep sleep...");
-    Serial.flush();
-    delay(100);
+    // Wait before next transmission (for testing)
+    delay(10000);  // 10 seconds
 
-    enterDeepSleep(getDeepSleepSeconds());
-
-    // Never reached (device resets on wake)
+    // Loop will repeat for continuous testing
 }

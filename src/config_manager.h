@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-// Initialize configuration manager (loads from SPIFFS)
+// Initialize configuration manager (loads from LittleFS)
 bool initConfigManager();
 
 // Serial configuration menu
@@ -12,13 +12,25 @@ void checkSerialConfig();
 // Get device name
 String getDeviceName();
 
-// Set device name (persists to SPIFFS)
+// Set device name (persists to LittleFS)
 void setDeviceName(const String& name);
 
-// Load configuration from SPIFFS
+// Get deep sleep interval in seconds
+uint32_t getDeepSleepSeconds();
+
+// Set deep sleep interval (persists to LittleFS)
+void setDeepSleepSeconds(uint32_t seconds);
+
+// Get pressure baseline in hPa
+float getConfigPressureBaseline();
+
+// Set pressure baseline (persists to LittleFS)
+void setConfigPressureBaseline(float baseline);
+
+// Load configuration from LittleFS
 bool loadConfig();
 
-// Save configuration to SPIFFS
+// Save configuration to LittleFS
 bool saveConfig();
 
 #endif // CONFIG_MANAGER_H
