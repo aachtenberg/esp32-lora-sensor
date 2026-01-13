@@ -66,11 +66,20 @@ void setup() {
 #endif
 
     Serial.println("\nSetup complete!");
+    
+    // Send startup event
+    sendEventMessage(EVENT_STARTUP, SEVERITY_INFO, "Device started");
 }
 
 void loop() {
     Serial.println("\n--- Wake Cycle Start ---");
     Serial.printf("Wake count: %d\n", g_wakeCount);
+    
+    // Send status message every 5 wake cycles (for faster name propagation)
+    if (g_wakeCount > 0 && g_wakeCount % 5 == 0) {
+        sendStatusMessage();
+        delay(500);  // Brief delay between messages
+    }
 
     // Read sensor data
     Serial.println("Reading BME280 sensor...");
@@ -162,10 +171,16 @@ void loop() {
     Serial.println("\n--- Wake Cycle Complete ---");
     Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
     Serial.printf("RSSI: %d dBm\n", getLastRSSI());
-    Serial.printf("Next transmission in: %d seconds\n", 10);
+    
+    // Get configured sensor interval
+    uint16_t intervalSeconds = getSensorIntervalSeconds();
+    Serial.printf("Next transmission in: %d seconds\n", intervalSeconds);
 
-    // Wait before next transmission (for testing)
-    delay(10000);  // 10 seconds
+    // Wait before next transmission using configured interval
+    delay(intervalSeconds * 1000);
+    
+    // Increment wake count for next cycle
+    g_wakeCount++;
 
     // Loop will repeat for continuous testing
 }

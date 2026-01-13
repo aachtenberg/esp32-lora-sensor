@@ -12,6 +12,12 @@ bool initLoRa();
 // Returns true if successfully transmitted, false if all retries failed
 bool transmitPacket(const uint8_t* data, size_t len);
 
+// Send status message to gateway
+bool sendStatusMessage();
+
+// Send event message to gateway
+bool sendEventMessage(uint8_t eventType, uint8_t severity, const char* message);
+
 // Wait for ACK from gateway
 // Returns true if ACK received, false on timeout
 bool waitForAck(uint16_t timeout_ms);
@@ -29,6 +35,9 @@ int16_t getLastRSSI();
 
 // Get SNR of last transmission
 int8_t getLastSNR();
+
+// Get transmission failure count
+uint16_t getTxFailures();
 
 // Check if restart was requested via command
 bool isRestartRequested();

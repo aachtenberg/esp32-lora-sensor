@@ -96,36 +96,54 @@ void displayStartup(const char* version) {
  */
 void displayReadings(const ReadingsPayload* readings) {
     if (display == nullptr || readings == nullptr) return;
-    
+
     display->clearBuffer();
-    display->setFont(u8g2_font_5x7_tf);
-    
-    // Temperature (larger)
     char buffer[32];
-    snprintf(buffer, sizeof(buffer), "T:%.1fC", readings->temperature / 100.0);
-    display->setFont(u8g2_font_ncenB08_tr);
-    display->drawStr(0, 11, buffer);
-    
-    // Humidity and Pressure (small)
+
+    // Title - "LoRa Sensor" to match gateway style
     display->setFont(u8g2_font_5x7_tf);
-    snprintf(buffer, sizeof(buffer), "H:%.0f%% P:%.0fhPa", readings->humidity / 100.0, readings->pressure / 100.0);
-    display->drawStr(0, 21, buffer);
-    
-    // Battery voltage and percent
-    snprintf(buffer, sizeof(buffer), "Bat:%.2fV (%d%%)", readings->batteryVoltage / 1000.0, readings->batteryPercent);
+    display->drawStr(0, 7, "LoRa Sensor");
+
+    // Device ID next to title
+    snprintf(buffer, sizeof(buffer), "ID:%04llX", (unsigned long long)(g_deviceId & 0xFFFF));
+    display->drawStr(80, 7, buffer);
+
+    // Temperature (large)
+    display->setFont(u8g2_font_ncenB08_tr);
+    snprintf(buffer, sizeof(buffer), "%.1fC", readings->temperature / 100.0);
+    display->drawStr(0, 19, buffer);
+
+    // Humidity (next to temp)
+    snprintf(buffer, sizeof(buffer), "H:%.0f%%", readings->humidity / 100.0);
+    display->drawStr(60, 19, buffer);
+
+    // Pressure with trend indicator
+    display->setFont(u8g2_font_6x10_tr);
+    const char* trendSymbol = "-";  // Steady
+    if (readings->pressureTrend == 2) trendSymbol = "^";      // Rising
+    else if (readings->pressureTrend == 0) trendSymbol = "v"; // Falling
+
+    snprintf(buffer, sizeof(buffer), "P:%.0f%s", readings->pressure / 100.0, trendSymbol);
     display->drawStr(0, 31, buffer);
-    
-    // TX status, RSSI, and wake count
-    snprintf(buffer, sizeof(buffer), "TX:%lu RSSI:%d", txCount, lastRssi);
-    display->drawStr(0, 41, buffer);
-    
-    // Device ID (truncated)
-    snprintf(buffer, sizeof(buffer), "ID:...%04llX", (unsigned long long)(g_deviceId & 0xFFFF));
-    display->drawStr(0, 51, buffer);
-    
-    // Status line (frequency or uptime)
-    display->drawStr(0, 61, "OK");
-    
+
+    // Pressure change from baseline (if baseline is set)
+    if (readings->pressureChange != 0) {
+        snprintf(buffer, sizeof(buffer), "%+.1fhPa", readings->pressureChange / 100.0);
+        display->drawStr(65, 31, buffer);
+    }
+
+    // Battery voltage and percent
+    display->setFont(u8g2_font_5x7_tf);
+    snprintf(buffer, sizeof(buffer), "Bat:%.2fV %d%%", readings->batteryVoltage / 1000.0, readings->batteryPercent);
+    display->drawStr(0, 43, buffer);
+
+    // TX count and RSSI
+    snprintf(buffer, sizeof(buffer), "TX:%lu RSSI:%ddBm", txCount, lastRssi);
+    display->drawStr(0, 55, buffer);
+
+    // LoRa frequency
+    display->drawStr(0, 64, "915MHz");
+
     display->sendBuffer();
 }
 

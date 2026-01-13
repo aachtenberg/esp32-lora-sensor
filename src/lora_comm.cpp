@@ -3,6 +3,7 @@
 #include "device_config.h"
 #include "lora_protocol.h"
 #include "config_manager.h"
+#include "sensor_manager.h"
 #include <RadioLib.h>
 #include <SPI.h>
 
@@ -12,10 +13,14 @@ static SX1262* radio = nullptr;
 // LoRa communication state
 static int16_t lastRSSI = 0;
 static int8_t lastSNR = 0;
-static uint16_t sequenceNumber = 0;
 static uint64_t deviceId = 0;
 static bool loraInitialized = false;
 static bool restartRequested = false;  // Flag for device restart command
+static uint16_t txFailures = 0;  // Count transmission failures
+static uint32_t lastSuccessTx = 0;  // Timestamp of last successful transmission
+
+// External global sequence number from main.cpp
+extern uint16_t g_sequenceNumber;
 
 /**
  * Initialize LoRa radio (SX1262)
@@ -134,6 +139,7 @@ bool transmitPacket(const uint8_t* data, size_t len) {
             // Get transmission statistics
             lastRSSI = radio->getRSSI();
             lastSNR = radio->getSNR();
+            lastSuccessTx = millis() / 1000;
             
             Serial.println("✅ Success!");
             Serial.printf("  RSSI: %d dBm\n", lastRSSI);
@@ -145,6 +151,7 @@ bool transmitPacket(const uint8_t* data, size_t len) {
             
             return true;
         } else {
+            txFailures++;
             Serial.printf("❌ Failed (code: %d)\n", state);
             
             // Print error description
@@ -174,19 +181,19 @@ bool waitForAck(uint16_t timeout_ms) {
     }
     
     Serial.printf("\n[LoRa RX] Waiting for ACK (timeout: %dms)...\n", timeout_ms);
-    
-    // Put radio in RX mode with timeout
-    int state = radio->startReceive(timeout_ms);
+
+    // Put radio in continuous RX mode (no timeout parameter for better reliability)
+    int state = radio->startReceive();
     if (state != RADIOLIB_ERR_NONE) {
         Serial.printf("❌ Failed to enter RX mode (code: %d)\n", state);
         return false;
     }
-    
-    // Wait for packet or timeout
+
+    // Wait for packet or timeout by polling DIO1 pin directly
     uint32_t startTime = millis();
     while (millis() - startTime < timeout_ms) {
-        // Check if packet received
-        if (radio->available()) {
+        // Check DIO1 pin for IRQ (packet received)
+        if (digitalRead(LORA_DIO1) == HIGH) {
             uint8_t rxBuffer[sizeof(LoRaPacketHeader) + LORA_MAX_PAYLOAD_SIZE];
             size_t rxLen = 0;
             
@@ -235,8 +242,10 @@ bool waitForAck(uint16_t timeout_ms) {
         
         delay(10); // Small delay to prevent busy-waiting
     }
-    
+
+    // Timeout - no ACK received, put radio back in standby
     Serial.println("⏱️  Timeout - no ACK received");
+    radio->standby();
     return false;
 }
 
@@ -250,18 +259,20 @@ bool checkForCommands(uint16_t timeout_ms) {
     }
     
     Serial.printf("\n[LoRa RX] Checking for commands (timeout: %dms)...\n", timeout_ms);
-    
-    // Put radio in RX mode with timeout
-    int state = radio->startReceive(timeout_ms);
+
+    // Put radio in continuous RX mode (no timeout parameter for better reliability)
+    int state = radio->startReceive();
     if (state != RADIOLIB_ERR_NONE) {
         Serial.printf("❌ Failed to enter RX mode (code: %d)\n", state);
         return false;
     }
-    
-    // Wait for packet or timeout
+
+    // Wait for packet or timeout by polling DIO1 pin directly
     uint32_t startTime = millis();
     while (millis() - startTime < timeout_ms) {
-        if (radio->available()) {
+        // Check DIO1 pin for IRQ (packet received)
+        if (digitalRead(LORA_DIO1) == HIGH) {
+            Serial.println("📡 DIO1 triggered - packet detected!");
             uint8_t rxBuffer[sizeof(LoRaPacketHeader) + LORA_MAX_PAYLOAD_SIZE];
             
             state = radio->readData(rxBuffer, sizeof(rxBuffer));
@@ -285,13 +296,18 @@ bool checkForCommands(uint16_t timeout_ms) {
                         
                         // Check if it's a command
                         if (header->msgType == MSG_COMMAND) {
-                            if (rxLen >= sizeof(LoRaPacketHeader) + sizeof(CommandPayload)) {
+                            // Validate we received the full payload (use header's payloadLen, not full struct size)
+                            if (rxLen >= sizeof(LoRaPacketHeader) + header->payloadLen) {
                                 CommandPayload* cmd = (CommandPayload*)(rxBuffer + sizeof(LoRaPacketHeader));
-                                Serial.printf("  📡 Command received: Type=0x%02X\n", cmd->cmdType);
-                                
+                                Serial.printf("  📡 Command received: Type=0x%02X, ParamLen=%d\n",
+                                             cmd->cmdType, cmd->paramLen);
+
                                 // Process command and return success/failure
                                 bool processed = processCommand(cmd);
                                 return processed;
+                            } else {
+                                Serial.printf("  ❌ Incomplete command packet (got %d bytes, expected %d)\n",
+                                             rxLen, sizeof(LoRaPacketHeader) + header->payloadLen);
                             }
                         } else {
                             Serial.printf("  ⚠️  Not a command (type: 0x%02X)\n", header->msgType);
@@ -307,8 +323,10 @@ bool checkForCommands(uint16_t timeout_ms) {
         
         delay(10);
     }
-    
-    Serial.println("⏱️  No commands received");
+
+    // Timeout - no commands received, put radio back in standby
+    Serial.println("⏱️  No commands received (timeout)");
+    radio->standby();
     return false;
 }
 
@@ -342,6 +360,11 @@ bool processCommand(CommandPayload* cmd) {
             if (newSeconds >= 0 && newSeconds <= 3600) {  // 0-1 hour
                 Serial.printf("  ✓ Deep sleep interval set to %d seconds\n", newSeconds);
                 setDeepSleepSeconds(newSeconds);
+                
+                char eventMsg[64];
+                snprintf(eventMsg, sizeof(eventMsg), "Sleep interval changed to %ds", newSeconds);
+                sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
+                
                 success = true;
             } else {
                 Serial.printf("  ❌ Invalid sleep value: %d (valid range: 0-3600)\n", newSeconds);
@@ -355,6 +378,11 @@ bool processCommand(CommandPayload* cmd) {
             if (newSeconds >= 5 && newSeconds <= 3600) {  // 5s - 1 hour
                 Serial.printf("  ✓ Sensor interval set to %d seconds\n", newSeconds);
                 setSensorIntervalSeconds(newSeconds);
+                
+                char eventMsg[64];
+                snprintf(eventMsg, sizeof(eventMsg), "Sensor interval changed to %ds", newSeconds);
+                sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
+                
                 success = true;
             } else {
                 Serial.printf("  ❌ Invalid interval value: %d (valid range: 5-3600)\n", newSeconds);
@@ -365,6 +393,9 @@ bool processCommand(CommandPayload* cmd) {
         case CMD_RESTART: {
             Serial.println("  ✓ Restart command received");
             Serial.println("  Device will restart after command window closes");
+            
+            sendEventMessage(EVENT_SHUTDOWN, SEVERITY_INFO, "Restart command received");
+            
             restartRequested = true;
             success = true;
             break;
@@ -372,21 +403,36 @@ bool processCommand(CommandPayload* cmd) {
         
         case CMD_STATUS: {
             Serial.println("  ✓ Status request received");
-            // TODO: Send status packet immediately
+            // Send status packet immediately
+            sendStatusMessage();
             success = true;
             break;
         }
         
         case CMD_CALIBRATE: {
             Serial.println("  ✓ Pressure calibration command received");
-            // TODO: Call sensor manager to calibrate
+            calibrateBaseline();
             success = true;
             break;
         }
-        
+
+        case CMD_SET_BASELINE: {
+            // Set specific baseline value (hPa)
+            float baselineHpa = atof(paramStr);
+            if (baselineHpa > 900 && baselineHpa < 1100) {  // Sanity check
+                float baselinePa = baselineHpa * 100.0;  // Convert hPa to Pa
+                Serial.printf("  ✓ Setting baseline to %.2f hPa\n", baselineHpa);
+                setPressureBaseline(baselinePa);
+                success = true;
+            } else {
+                Serial.printf("  ❌ Invalid baseline: %.2f (valid range: 900-1100 hPa)\n", baselineHpa);
+            }
+            break;
+        }
+
         case CMD_CLEAR_BASELINE: {
             Serial.println("  ✓ Clear pressure baseline command received");
-            // TODO: Call sensor manager to clear baseline
+            clearBaseline();
             success = true;
             break;
         }
@@ -426,6 +472,114 @@ int16_t getLastRSSI() {
  */
 int8_t getLastSNR() {
     return lastSNR;
+}
+
+/**
+ * Get transmission failure count
+ */
+uint16_t getTxFailures() {
+    return txFailures;
+}
+
+/**
+ * Send status message to gateway
+ */
+bool sendStatusMessage() {
+    if (!loraInitialized) {
+        Serial.println("❌ LoRa not initialized!");
+        return false;
+    }
+    
+    extern uint32_t g_wakeCount;
+    extern uint64_t g_deviceId;
+    
+    Serial.println("\n📊 Sending STATUS message...");
+    
+    // Build status payload
+    StatusPayload status;
+    status.uptime = millis() / 1000;
+    status.wakeCount = g_wakeCount;
+    status.sensorHealthy = 1;  // TODO: Track sensor health
+    status.loraRssi = lastRSSI;
+    status.loraSNR = lastSNR;
+    status.freeHeap = ESP.getFreeHeap() / 1024;
+    status.sensorFailures = 0;  // TODO: Track sensor failures
+    status.txFailures = txFailures;
+    status.lastSuccessTx = lastSuccessTx;
+    status.deepSleepSec = getDeepSleepSeconds();
+    
+    // Include device name from config
+    String deviceName = getDeviceName();
+    strncpy(status.deviceName, deviceName.c_str(), sizeof(status.deviceName) - 1);
+    status.deviceName[sizeof(status.deviceName) - 1] = '\0';  // Ensure null termination
+    
+    // Include location (empty for now, future: GPS coordinates)
+    status.location[0] = '\0';  // Empty for now, will be populated by GPS in future
+    
+    // Build packet
+    uint8_t packet[sizeof(LoRaPacketHeader) + sizeof(StatusPayload)];
+    LoRaPacketHeader* header = (LoRaPacketHeader*)packet;
+    
+    initHeader(header, MSG_STATUS, g_deviceId, g_sequenceNumber++, sizeof(StatusPayload));
+    memcpy(packet + sizeof(LoRaPacketHeader), &status, sizeof(StatusPayload));
+    
+    // Transmit
+    bool success = transmitPacket(packet, sizeof(packet));
+    
+    if (success) {
+        Serial.println("✅ Status message sent");
+    } else {
+        Serial.println("❌ Status message failed");
+    }
+    
+    return success;
+}
+
+/**
+ * Send event message to gateway
+ */
+bool sendEventMessage(uint8_t eventType, uint8_t severity, const char* message) {
+    if (!loraInitialized) {
+        Serial.println("❌ LoRa not initialized!");
+        return false;
+    }
+    
+    extern uint64_t g_deviceId;
+    
+    Serial.printf("\n📢 Sending EVENT: %s\n", message);
+    
+    // Build event payload
+    EventPayload event;
+    event.eventType = eventType;
+    event.severity = severity;
+    event.messageLen = strlen(message);
+    
+    // Truncate message if too long
+    if (event.messageLen > sizeof(event.message) - 1) {
+        event.messageLen = sizeof(event.message) - 1;
+    }
+    
+    memcpy(event.message, message, event.messageLen);
+    event.message[event.messageLen] = '\0';
+    
+    // Build packet
+    uint8_t payloadLen = 3 + event.messageLen;
+    uint8_t packet[sizeof(LoRaPacketHeader) + payloadLen];
+    LoRaPacketHeader* header = (LoRaPacketHeader*)packet;
+    
+    initHeader(header, MSG_EVENT, g_deviceId, g_sequenceNumber++, payloadLen);
+    memcpy(packet + sizeof(LoRaPacketHeader), &event, payloadLen);
+    
+    // Transmit
+    bool success = transmitPacket(packet, sizeof(LoRaPacketHeader) + payloadLen);
+    
+    if (success) {
+        Serial.println("✅ Event message sent");
+    } else {
+        Serial.println("❌ Event message failed");
+    }
+    
+    return success;
 }
 
 /**
