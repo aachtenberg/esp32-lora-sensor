@@ -4,10 +4,10 @@ Battery-powered environmental sensor using BME280 and LoRa communication.
 
 ## Hardware
 
-- **ESP32**: ESP32 LX7 Dual-core
+- **Board**: Heltec WiFi LoRa 32 V3 (ESP32-S3) with built-in SX1262
 - **LoRa**: SX1262 LoRa module (863-928 MHz)
-- **Sensor**: BME280 (temperature, humidity, pressure)
-- **Display**: 0.96" OLED SSD1306 (I2C)
+- **Sensor**: BME280 (temperature, humidity, pressure) - external breakout
+- **Display**: 0.96" OLED SSD1306 (I2C) - built-in
 - **Power**: 3.7V LiPo battery
 
 ## Features
@@ -16,7 +16,7 @@ Battery-powered environmental sensor using BME280 and LoRa communication.
 - LoRa peer-to-peer communication with gateway
 - **Device name propagation**: Auto-sends name to gateway in status messages
 - **Location field**: Prepared for future GPS integration
-- Deep sleep mode for extended battery life (3-6 months)
+- Low-power operation with configurable sleep intervals
 - **Status messages**: Sent every 5 wake cycles (~7.5 min at 90s interval)
 - **Event messages**: Startup, errors, config changes
 - Battery voltage and percentage monitoring
@@ -24,25 +24,32 @@ Battery-powered environmental sensor using BME280 and LoRa communication.
 - **Command reception**: Opens RX window after each transmission
 - OLED display for status and readings
 - Serial configuration menu
-- SPIFFS-based configuration persistence
+- LittleFS-based configuration persistence
 - **Unified sequence numbering**: Prevents duplicates across all message types
 
 ## Pin Configuration
 
 See [include/device_config.h](include/device_config.h) for complete pin assignments.
 
-**Critical pins** (verify against your module datasheet):
+**Heltec WiFi LoRa 32 V3 (ESP32-S3):**
 ```
-LoRa SX1262 (SPI):
-  MISO = 19, MOSI = 27, SCK = 5
-  NSS = 18, DIO1 = 26, BUSY = 23, RST = 14
+LoRa SX1262 (SPI - built-in):
+  MISO = 11, MOSI = 10, SCK = 9
+  NSS = 8, DIO1 = 14, BUSY = 13, RST = 12
 
-BME280 + OLED (I2C shared):
-  SDA = 21, SCL = 22
-  BME280 addr = 0x76, OLED addr = 0x3C
+OLED Display (I2C - built-in):
+  SDA = 17, SCL = 18, RST = 21
+  OLED addr = 0x3C
 
-Battery: GPIO 35 (ADC)
+BME280 Sensor (I2C - external, separate bus):
+  SDA = 33, SCL = 26
+  BME280 addr = 0x76
+
+Battery: GPIO 36 (ADC)
+Vext Control: GPIO 36 (LOW = peripherals ON)
 ```
+
+> **Note:** The BME280 uses a separate I2C bus from the built-in OLED to avoid conflicts.
 
 ## Quick Start
 
@@ -93,9 +100,9 @@ Press 'C' within 5 seconds of boot to enter config mode:
 5. Save and exit
 ```
 
-### SPIFFS Files
+### LittleFS Files
 
-Configuration is stored in `/data/`:
+Configuration is stored in `/data/` (LittleFS filesystem):
 - `device_name.txt` - Device name sent to gateway (default: "BME280-LoRa-001")
 - `deep_sleep_seconds.txt` - Sleep interval (default: 90 seconds)
 - `pressure_baseline.txt` - Pressure baseline in hPa (0.0 = disabled)
@@ -104,24 +111,15 @@ Configuration is stored in `/data/`:
 - Name is loaded from `device_name.txt` on boot
 - Sent to gateway in status messages (every 5 wake cycles)
 - Gateway automatically updates its registry and MQTT messages
-- Full 64-bit device ID used: `0000F09E9E76AEC4`
+- Full 64-bit device ID used (e.g., `AABBCCDDEEFF0011`)
 
-## Power Optimization
+## Power Consumption
 
-Expected battery life on 3000mAh LiPo:
+**Typical current draw:**
+- Active (sensor read + LoRa TX): ~50-120 mA for ~3 seconds
+- Idle between readings: ~20-50 mA (display off)
 
-| Interval | Battery Life |
-|----------|--------------|
-| 15 min   | ~5 months    |
-| 30 min   | ~10 months   |
-| 60 min   | ~20 months*  |
-
-*Limited by battery self-discharge (~1 year max)
-
-**Current consumption**:
-- Deep sleep: <50 µA
-- Wake + sensor: ~50 mA for 2 seconds
-- LoRa TX: ~120 mA for 300 ms
+> **Note:** True deep sleep mode is planned for future versions. Current implementation uses timed delays between readings.
 
 ## LoRa Configuration
 
@@ -149,12 +147,11 @@ Uses binary packet protocol defined in [lib/LoRaProtocol/lora_protocol.h](lib/Lo
 - `MSG_ACK` (0x20) - Acknowledgments
 
 **Communication flow**:
-1. Sensor wakes from deep sleep
-2. Reads BME280 sensor
-3. Transmits readings via LoRa
-4. Opens RX window to listen for commands
-5. Processes any received commands
-6. Returns to deep sleep
+1. Sensor reads BME280
+2. Transmits readings via LoRa
+3. Opens RX window to listen for commands
+4. Processes any received commands
+5. Waits for configured interval before next reading
 
 **Status messages** (every 5 wake cycles):
 - Device name from `/data/device_name.txt`
@@ -188,7 +185,7 @@ esp32-lora-sensor/
 │   ├── lora_config.h    # Radio settings
 │   └── version.h        # Firmware version
 ├── lib/LoRaProtocol/    # Shared protocol library
-└── data/                # SPIFFS filesystem
+└── data/                # LittleFS filesystem
 ```
 
 ### Building
@@ -210,25 +207,19 @@ pio run -t clean
 ## Troubleshooting
 
 ### Sensor not reading
-- Check I2C wiring (SDA=21, SCL=22)
-- Verify BME280 address (0x76 or 0x77)
-- Check I2C pullup resistors (usually built-in)
+- Check BME280 I2C wiring (SDA=33, SCL=26 on Heltec V3)
+- Verify BME280 address (0x76 if SDO low, 0x77 if SDO high)
+- Ensure Vext is enabled (GPIO 36 LOW)
 
 ### LoRa not transmitting
-- Verify SPI pins match your module
-- Check antenna connection
-- Verify frequency matches your region (915 MHz US, 868 MHz EU)
-
-### Battery draining too fast
-- Measure deep sleep current with ammeter (should be <50 µA)
-- Check for incorrect pullups on GPIO pins
-- Disable OLED during sleep
-- Increase sleep interval
+- Verify antenna is connected (built-in on Heltec V3)
+- Check frequency matches your region (915 MHz US, 868 MHz EU)
+- Ensure Vext is enabled for LoRa power
 
 ### Display not working
-- Check I2C address (run I2C scanner: 0x3C expected)
-- Verify shared I2C bus with BME280
-- Some modules have hardware I2C pin assignments
+- Built-in OLED uses SDA=17, SCL=18, RST=21
+- Check I2C address (0x3C expected)
+- Ensure Vext is enabled
 
 ## Related Projects
 
