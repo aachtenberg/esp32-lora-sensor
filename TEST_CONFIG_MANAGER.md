@@ -79,10 +79,10 @@ Type 'exit' to close menu
 === Config Manager Initialization ===
 ✅ LittleFS mounted
 ✅ Loaded device name: BME280-LoRa-001
-✅ Loaded deep sleep: 900 seconds
+✅ Loaded deep sleep: 90 seconds
 ✅ Loaded pressure baseline: 0.00 hPa
 Device Name: BME280-LoRa-001
-Deep Sleep: 900 seconds
+Deep Sleep: 90 seconds
 Pressure Baseline: 0.00 hPa
 =====================================
 
@@ -90,7 +90,7 @@ Pressure Baseline: 0.00 hPa
 
 [TEST 2] Read Current Configuration
 Device Name: BME280-LoRa-001
-Deep Sleep: 900 seconds (15 minutes)
+Deep Sleep: 90 seconds (1.5 minutes)
 Pressure Baseline: 0.00 hPa
 
 [TEST 3] Update Settings

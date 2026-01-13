@@ -60,7 +60,7 @@
 
 // Sensor Timing
 #define SENSOR_READ_INTERVAL_MS 2000  // Time for BME280 to stabilize
-#define DEFAULT_DEEP_SLEEP_SECONDS 900  // 15 minutes default
+#define DEFAULT_DEEP_SLEEP_SECONDS 90  // 90 seconds default (configurable via MQTT)
 
 // BME280 Calibration Offsets (from current project)
 // Adjust these based on your sensor's calibration
