@@ -7,13 +7,13 @@
 
 // SX1262 LoRa Module Pins (SPI Interface)
 // Heltec WiFi LoRa 32 V3 (ESP32-S3) with built-in SX1262
-#define LORA_MISO      11   // FSPIQ (built-in LoRa MISO)
-#define LORA_MOSI      10   // FSPID (built-in LoRa MOSI)
-#define LORA_SCK       9    // FSPICLK (built-in LoRa SCK)
-#define LORA_NSS       8    // Chip Select / NSS (built-in LoRa CS)
-#define LORA_DIO1      14   // IRQ Pin (DIO1)
-#define LORA_BUSY      13   // Busy Pin
-#define LORA_RST       12   // Reset Pin
+#define LORA_MISO      11   // Built-in SX1262 MISO
+#define LORA_MOSI      10   // Built-in SX1262 MOSI
+#define LORA_SCK       9    // Built-in SX1262 SCK
+#define LORA_NSS       8    // Built-in SX1262 NSS (Chip Select)
+#define LORA_DIO1      14   // Built-in SX1262 DIO1 (IRQ)
+#define LORA_BUSY      13   // Built-in SX1262 BUSY
+#define LORA_RST       12   // Built-in SX1262 RST
 
 // Heltec-specific: Vext power control for LoRa and OLED
 // Vext must be LOW to enable power to peripherals
