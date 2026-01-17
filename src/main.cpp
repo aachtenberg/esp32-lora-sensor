@@ -106,11 +106,13 @@ void loop() {
     memcpy(packet + sizeof(LoRaPacketHeader), &readings, sizeof(ReadingsPayload));
 
     // Transmit via LoRa with retries
-    Serial.println("Transmitting packet...");
+    uint32_t txStartMs = millis();
+    Serial.printf("[%lu] Transmitting packet...\n", txStartMs);
     bool txSuccess = transmitPacket(packet, sizeof(packet));
+    uint32_t txEndMs = millis();
 
     if (txSuccess) {
-        Serial.println("Transmission successful!");
+        Serial.printf("[%lu] ✅ Transmission successful! (took %lums)\n", txEndMs, txEndMs - txStartMs);
         
         // Update display with TX stats
 #ifdef OLED_ENABLED
@@ -121,25 +123,25 @@ void loop() {
 
         // Wait for ACK from gateway (unless battery critical)
         if (readings.batteryPercent > BATTERY_CRITICAL_PERCENT) {
-            Serial.println("Waiting for ACK...");
+            Serial.printf("[%lu] Waiting for ACK...\n", millis());
             if (waitForAck(LORA_ACK_TIMEOUT_MS)) {
-                Serial.println("ACK received!");
+                Serial.printf("[%lu] ACK received!\n", millis());
 #ifdef OLED_ENABLED
                 displayStatus("ACK OK!");
                 delay(1000);
 #endif
             } else {
-                Serial.println("No ACK received (timeout)");
+                Serial.printf("[%lu] No ACK received (timeout)\n", millis());
 #ifdef OLED_ENABLED
                 displayStatus("No ACK");
                 delay(1000);
 #endif
             }
         } else {
-            Serial.println("Battery critical - skipping ACK wait");
+            Serial.printf("[%lu] Battery critical - skipping ACK wait\n", millis());
         }
     } else {
-        Serial.println("ERROR: All transmission attempts failed!");
+        Serial.printf("[%lu] ERROR: All transmission attempts failed!\n", millis());
 #ifdef OLED_ENABLED
         displayError("TX Failed!");
         delay(2000);
@@ -147,15 +149,16 @@ void loop() {
     }
 
     // Check for incoming commands from gateway
-    Serial.println("Checking for commands...");
+    uint32_t rxReadyMs = millis();
+    Serial.printf("[%lu] Checking for commands...\n", rxReadyMs);
     if (checkForCommands(LORA_COMMAND_TIMEOUT_MS)) {
-        Serial.println("Command received and processed");
+        Serial.printf("[%lu] Command received and processed\n", millis());
         // Commands are processed in checkForCommands()
     }
 
     // Check if restart was requested
     if (isRestartRequested()) {
-        Serial.println("\n🔄 RESTARTING DEVICE...");
+        Serial.printf("[%lu] 🔄 RESTARTING DEVICE...\n", millis());
         Serial.flush();
         delay(500);
         ESP.restart();
@@ -168,9 +171,9 @@ void loop() {
 #endif
 
     // Print status
-    Serial.println("\n--- Wake Cycle Complete ---");
-    Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
-    Serial.printf("RSSI: %d dBm\n", getLastRSSI());
+    Serial.printf("[%lu] --- Wake Cycle Complete ---\n", millis());
+    Serial.printf("[%lu] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
+    Serial.printf("[%lu] RSSI: %d dBm\n", millis(), getLastRSSI());
     
     // Get configured sensor interval
     uint16_t intervalSeconds = getSensorIntervalSeconds();

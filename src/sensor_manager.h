@@ -23,4 +23,7 @@ void calibrateBaseline();
 // Clear baseline tracking
 void clearBaseline();
 
+// Get sensor failure count
+uint16_t getSensorFailures();
+
 #endif // SENSOR_MANAGER_H

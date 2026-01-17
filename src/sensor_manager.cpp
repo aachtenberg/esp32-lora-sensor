@@ -6,6 +6,7 @@
 
 #include "sensor_manager.h"
 #include "device_config.h"
+#include "lora_comm.h"
 #include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
@@ -22,9 +23,27 @@ TwoWire I2C_BME = TwoWire(1);
 // Pressure baseline for weather tracking
 static float pressureBaseline = 0.0;  // 0 = disabled
 
+// Sensor failure counter
+static uint16_t sensorFailures = 0;
+
 // Forward declarations
 static float loadPressureBaseline();
 static void savePressureBaseline(float baseline);
+static void resetI2C();
+
+// ===================================================================
+// I2C Recovery
+// ===================================================================
+
+static void resetI2C() {
+    Serial.println("[SENSOR] Resetting I2C bus...");
+    digitalWrite(VEXT_CTRL, HIGH); // Power off
+    delay(200);
+    digitalWrite(VEXT_CTRL, LOW);  // Power on
+    delay(100);
+    I2C_BME.begin(BME280_SDA, BME280_SCL, 100000);
+    delay(50);
+}
 
 // ===================================================================
 // Initialization
@@ -80,6 +99,28 @@ bool readSensorData(ReadingsPayload* readings) {
     Adafruit_Sensor *bme_pressure = bme280.getPressureSensor();
     Adafruit_Sensor *bme_humidity = bme280.getHumiditySensor();
 
+    // Check for I2C errors and recover if needed
+    if (!bme_temp || !bme_pressure || !bme_humidity) {
+        Serial.println("[SENSOR] ERROR: I2C read failed, resetting...");
+        sensorFailures++;
+        resetI2C();
+        if (!bme280.begin(BME280_ADDR, &I2C_BME)) {
+            Serial.println("[SENSOR] ERROR: Recovery failed");
+            sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "BME280 I2C failure - recovery failed");
+            return false;
+        }
+        delay(50);
+        bme_temp = bme280.getTemperatureSensor();
+        bme_pressure = bme280.getPressureSensor();
+        bme_humidity = bme280.getHumiditySensor();
+        if (!bme_temp || !bme_pressure || !bme_humidity) {
+            sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "BME280 sensors unavailable after reset");
+            return false;
+        }
+        // Recovery successful
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_WARNING, "BME280 I2C recovered");
+    }
+
     bme_temp->getEvent(&temp_event);
     bme_pressure->getEvent(&pressure_event);
     bme_humidity->getEvent(&humidity_event);
@@ -88,6 +129,51 @@ bool readSensorData(ReadingsPayload* readings) {
     float temperature = temp_event.temperature + TEMP_OFFSET_C;
     float humidity = humidity_event.relative_humidity + HUMIDITY_OFFSET_RH;
     float pressure = pressure_event.pressure * 100.0 + PRESSURE_OFFSET_PA;  // Convert hPa to Pa
+
+    // Validate readings - detect I2C communication failures
+    bool validReading = true;
+    if (temperature < -40.0 || temperature > 85.0) {
+        Serial.printf("[SENSOR] ERROR: Invalid temperature: %.2f°C\n", temperature);
+        validReading = false;
+    }
+    if (humidity < 0.0 || humidity > 100.0) {
+        Serial.printf("[SENSOR] ERROR: Invalid humidity: %.2f%%\n", humidity);
+        validReading = false;
+    }
+    if (pressure < 30000.0 || pressure > 110000.0) {  // 300-1100 hPa in Pa
+        Serial.printf("[SENSOR] ERROR: Invalid pressure: %.2f hPa\n", pressure / 100.0);
+        validReading = false;
+    }
+
+    if (!validReading) {
+        Serial.println("[SENSOR] I2C communication failure detected, attempting recovery...");
+        sensorFailures++;
+        resetI2C();
+        if (!bme280.begin(BME280_ADDR, &I2C_BME)) {
+            Serial.println("[SENSOR] ERROR: Recovery failed");
+            sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "BME280 invalid data - recovery failed");
+            return false;
+        }
+        // Try reading again after recovery
+        delay(100);
+        bme_temp->getEvent(&temp_event);
+        bme_pressure->getEvent(&pressure_event);
+        bme_humidity->getEvent(&humidity_event);
+        
+        temperature = temp_event.temperature + TEMP_OFFSET_C;
+        humidity = humidity_event.relative_humidity + HUMIDITY_OFFSET_RH;
+        pressure = pressure_event.pressure * 100.0 + PRESSURE_OFFSET_PA;
+        
+        // Check again
+        if (temperature < -40.0 || temperature > 85.0 ||
+            humidity < 0.0 || humidity > 100.0 ||
+            pressure < 30000.0 || pressure > 110000.0) {
+            Serial.println("[SENSOR] ERROR: Still invalid after recovery");
+            sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "BME280 persistent I2C failure");
+            return false;
+        }
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_WARNING, "BME280 I2C recovered");
+    }
 
     // Calculate altitude from pressure
     float altitude = 44330.0 * (1.0 - pow(pressure / PRESSURE_SEA_LEVEL, 1.0/5.255));
@@ -209,4 +295,12 @@ static void savePressureBaseline(float baseline) {
     file.close();
 
     Serial.printf("[BASELINE] Saved: %.2f Pa (%.2f hPa)\n", baseline, baseline / 100.0);
+}
+
+// ===================================================================
+// Sensor Health Tracking
+// ===================================================================
+
+uint16_t getSensorFailures() {
+    return sensorFailures;
 }

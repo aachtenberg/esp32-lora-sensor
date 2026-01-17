@@ -18,6 +18,8 @@ static bool loraInitialized = false;
 static bool restartRequested = false;  // Flag for device restart command
 static uint16_t txFailures = 0;  // Count transmission failures
 static uint32_t lastSuccessTx = 0;  // Timestamp of last successful transmission
+static uint16_t lastTimeOnAir = 0;  // Last transmission time-on-air (ms)
+static int8_t txPowerDbm = 0;  // Current TX power
 
 // External global sequence number from main.cpp
 extern uint16_t g_sequenceNumber;
@@ -27,14 +29,14 @@ extern uint16_t g_sequenceNumber;
  * Configures SPI, initializes RadioLib, and sets radio parameters
  */
 bool initLoRa() {
-    Serial.println("\n=== LoRa Initialization ===");
+    Serial.printf("[%lu] === LoRa Initialization ===\n", millis());
     
     // Get unique device ID from ESP32 chip ID
     deviceId = ESP.getEfuseMac();
-    Serial.printf("Device ID: 0x%016llX\n", deviceId);
+    Serial.printf("[%lu] Device ID: 0x%016llX\n", millis(), deviceId);
     
     // Enable Vext power (Heltec boards require this)
-    Serial.print("Enabling Vext power... ");
+    Serial.printf("[%lu] Enabling Vext power... ", millis());
     pinMode(VEXT_CTRL, OUTPUT);
     digitalWrite(VEXT_CTRL, LOW);  // LOW = power ON for Heltec boards
     delay(100);  // Wait for power stabilization
@@ -44,12 +46,13 @@ bool initLoRa() {
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
     
     // Create SX1262 instance
-    Serial.print("Creating SX1262 instance... ");
+    Serial.printf("[%lu] Creating SX1262 instance... ", millis());
     radio = new SX1262(new Module(LORA_NSS, LORA_DIO1, LORA_RST, LORA_BUSY));
     Serial.println("✅");
     
     // Initialize SX1262
-    Serial.print("Initializing SX1262... ");
+    Serial.printf("[%lu] Initializing SX1262... ", millis());
+    txPowerDbm = LORA_TX_POWER;  // Store TX power
     int state = radio->begin(LORA_FREQUENCY,
                              LORA_BANDWIDTH,
                              LORA_SPREADING,
@@ -59,7 +62,7 @@ bool initLoRa() {
                              LORA_PREAMBLE_LEN);
     
     if (state != RADIOLIB_ERR_NONE) {
-        Serial.printf("❌ Failed! (code: %d)\n", state);
+        Serial.printf("[%lu] ❌ Failed! (code: %d)\n", millis(), state);
         delete radio;
         radio = nullptr;
         return false;
@@ -69,24 +72,24 @@ bool initLoRa() {
     // Configure CRC
     state = radio->setCRC(LORA_CRC_ENABLED);
     if (state != RADIOLIB_ERR_NONE) {
-        Serial.printf("⚠️  CRC config failed (code: %d)\n", state);
+        Serial.printf("[%lu] ⚠️  CRC config failed (code: %d)\n", millis(), state);
     }
     
     // Force explicit header mode (includes length/coding info in packet)
     state = radio->explicitHeader();
     if (state != RADIOLIB_ERR_NONE) {
-        Serial.printf("⚠️  Explicit header config failed (code: %d)\n", state);
+        Serial.printf("[%lu] ⚠️  Explicit header config failed (code: %d)\n", millis(), state);
     }
     
     // Print radio configuration
-    Serial.println("\nRadio Configuration:");
-    Serial.printf("  Frequency: %.1f MHz\n", LORA_FREQUENCY);
-    Serial.printf("  Bandwidth: %.1f kHz\n", LORA_BANDWIDTH);
-    Serial.printf("  Spreading Factor: %d\n", LORA_SPREADING);
-    Serial.printf("  Coding Rate: 4/%d\n", LORA_CODING_RATE);
-    Serial.printf("  TX Power: %d dBm\n", LORA_TX_POWER);
-    Serial.printf("  Sync Word: 0x%02X\n", LORA_SYNC_WORD);
-    Serial.println("===========================\n");
+    Serial.printf("[%lu] Radio Configuration:\n", millis());
+    Serial.printf("[%lu]   Frequency: %.1f MHz\n", millis(), LORA_FREQUENCY);
+    Serial.printf("[%lu]   Bandwidth: %.1f kHz\n", millis(), LORA_BANDWIDTH);
+    Serial.printf("[%lu]   Spreading Factor: %d\n", millis(), LORA_SPREADING);
+    Serial.printf("[%lu]   Coding Rate: 4/%d\n", millis(), LORA_CODING_RATE);
+    Serial.printf("[%lu]   TX Power: %d dBm\n", millis(), LORA_TX_POWER);
+    Serial.printf("[%lu]   Sync Word: 0x%02X\n", millis(), LORA_SYNC_WORD);
+    Serial.printf("[%lu] ===========================\n", millis());
     
     loraInitialized = true;
     return true;
@@ -98,19 +101,19 @@ bool initLoRa() {
  */
 bool transmitPacket(const uint8_t* data, size_t len) {
     if (!loraInitialized) {
-        Serial.println("❌ LoRa not initialized!");
+        Serial.printf("[%lu] ❌ LoRa not initialized!\n", millis());
         return false;
     }
     
     if (len > 255) {
-        Serial.printf("❌ Packet too large: %d bytes (max 255)\n", len);
+        Serial.printf("[%lu] ❌ Packet too large: %d bytes (max 255)\n", millis(), len);
         return false;
     }
 
-    Serial.printf("\n[LoRa TX] Sending %d bytes\n", len);
+    Serial.printf("[%lu] [LoRa TX] Sending %d bytes\n", millis(), len);
     
     // Debug: Print raw bytes
-    Serial.print("  TX Data: ");
+    Serial.printf("[%lu]   TX Data: ", millis());
     for (size_t i = 0; i < len && i < 20; i++) {
         Serial.printf("%02X ", data[i]);
     }
@@ -121,10 +124,10 @@ bool transmitPacket(const uint8_t* data, size_t len) {
     for (int attempt = 0; attempt <= LORA_TX_RETRIES; attempt++) {
         if (attempt > 0) {
             uint16_t delayMs = LORA_TX_RETRY_DELAY_MS * (1 << (attempt - 1)); // Exponential backoff
-            Serial.printf("  Retry %d/%d (waiting %dms)...\n", attempt, LORA_TX_RETRIES, delayMs);
+            Serial.printf("[%lu]   Retry %d/%d (waiting %dms)...\n", millis(), attempt, LORA_TX_RETRIES, delayMs);
             delay(delayMs);
         } else {
-            Serial.print("  Transmitting... ");
+            Serial.printf("[%lu]   Transmitting... ", millis());
         }
         
         // Ensure radio is in standby and ready before transmitting
@@ -140,34 +143,30 @@ bool transmitPacket(const uint8_t* data, size_t len) {
             lastRSSI = radio->getRSSI();
             lastSNR = radio->getSNR();
             lastSuccessTx = millis() / 1000;
+            lastTimeOnAir = (uint16_t)(radio->getTimeOnAir(len) / 1000.0); // Convert to ms
             
             Serial.println("✅ Success!");
-            Serial.printf("  RSSI: %d dBm\n", lastRSSI);
-            Serial.printf("  SNR: %d dB\n", lastSNR);
-            
-            // Estimate time-on-air (rough calculation)
-            float timeOnAir = radio->getTimeOnAir(len) / 1000.0;
-            Serial.printf("  Time-on-air: %.2f ms\n", timeOnAir);
+            Serial.printf("[%lu]   RSSI: %d dBm, SNR: %d dB, ToA: %u ms\n", millis(), lastRSSI, lastSNR, lastTimeOnAir);
             
             return true;
         } else {
             txFailures++;
-            Serial.printf("❌ Failed (code: %d)\n", state);
+            Serial.printf("[%lu] ❌ Failed (code: %d)\n", millis(), state);
             
             // Print error description
             if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
-                Serial.println("  Error: Packet too long");
+                Serial.printf("[%lu]   Error: Packet too long\n", millis());
             } else if (state == RADIOLIB_ERR_TX_TIMEOUT) {
-                Serial.println("  Error: TX timeout");
+                Serial.printf("[%lu]   Error: TX timeout\n", millis());
             } else if (state == RADIOLIB_ERR_CHIP_NOT_FOUND) {
-                Serial.println("  Error: SX1262 chip not responding");
+                Serial.printf("[%lu]   Error: SX1262 chip not responding\n", millis());
                 loraInitialized = false;
                 return false; // Don't retry if chip is dead
             }
         }
     }
     
-    Serial.printf("❌ All %d transmission attempts failed!\n", LORA_TX_RETRIES + 1);
+    Serial.printf("[%lu] ❌ All %d transmission attempts failed!\n", millis(), LORA_TX_RETRIES + 1);
     return false;
 }
 
@@ -180,12 +179,12 @@ bool waitForAck(uint16_t timeout_ms) {
         return false;
     }
     
-    Serial.printf("\n[LoRa RX] Waiting for ACK (timeout: %dms)...\n", timeout_ms);
+    Serial.printf("[%lu] [LoRa RX] Waiting for ACK (timeout: %dms)\n", millis(), timeout_ms);
 
     // Put radio in continuous RX mode (no timeout parameter for better reliability)
     int state = radio->startReceive();
     if (state != RADIOLIB_ERR_NONE) {
-        Serial.printf("❌ Failed to enter RX mode (code: %d)\n", state);
+        Serial.printf("[%lu] ❌ Failed to enter RX mode (code: %d)\n", millis(), state);
         return false;
     }
 
@@ -206,37 +205,37 @@ bool waitForAck(uint16_t timeout_ms) {
                 lastRSSI = radio->getRSSI();
                 lastSNR = radio->getSNR();
                 
-                Serial.printf("✅ Packet received: %d bytes\n", rxLen);
-                Serial.printf("  RSSI: %d dBm, SNR: %d dB\n", lastRSSI, lastSNR);
+                Serial.printf("[%lu] ✅ Packet received: %d bytes\n", millis(), rxLen);
+                Serial.printf("[%lu]   RSSI: %d dBm, SNR: %d dB\n", millis(), lastRSSI, lastSNR);
                 
                 // Validate header
                 if (rxLen >= sizeof(LoRaPacketHeader)) {
                     LoRaPacketHeader* header = (LoRaPacketHeader*)rxBuffer;
                     
                     if (validateHeader(header)) {
-                        Serial.printf("  Header valid: Type=0x%02X, Seq=%d\n",
-                                    header->msgType, header->sequenceNum);
+                        Serial.printf("[%lu]   Header valid: Type=0x%02X, Seq=%d\n",
+                                    millis(), header->msgType, header->sequenceNum);
                         
                         // Check if it's an ACK
                         if (header->msgType == MSG_ACK) {
                             if (rxLen >= sizeof(LoRaPacketHeader) + sizeof(AckPayload)) {
                                 AckPayload* ack = (AckPayload*)(rxBuffer + sizeof(LoRaPacketHeader));
-                                Serial.printf("  ACK for sequence %d: %s\n",
-                                            ack->ackSequenceNum,
+                                Serial.printf("[%lu]   ACK for sequence %d: %s\n",
+                                            millis(), ack->ackSequenceNum,
                                             ack->success ? "SUCCESS" : "FAILED");
                                 return ack->success;
                             }
                         } else {
-                            Serial.printf("  ⚠️  Not an ACK (type: 0x%02X)\n", header->msgType);
+                            Serial.printf("[%lu]   ⚠️  Not an ACK (type: 0x%02X)\n", millis(), header->msgType);
                         }
                     } else {
-                        Serial.println("  ❌ Header validation failed");
+                        Serial.printf("[%lu]   ❌ Header validation failed\n", millis());
                     }
                 } else {
-                    Serial.println("  ❌ Packet too short for header");
+                    Serial.printf("[%lu]   ❌ Packet too short for header\n", millis());
                 }
             } else {
-                Serial.printf("❌ Read failed (code: %d)\n", state);
+                Serial.printf("[%lu] ❌ Read failed (code: %d)\n", millis(), state);
             }
         }
         
@@ -244,7 +243,7 @@ bool waitForAck(uint16_t timeout_ms) {
     }
 
     // Timeout - no ACK received, put radio back in standby
-    Serial.println("⏱️  Timeout - no ACK received");
+    Serial.printf("[%lu] Timeout - no ACK received\n", millis());
     radio->standby();
     return false;
 }
@@ -254,25 +253,31 @@ bool waitForAck(uint16_t timeout_ms) {
  * Listens for command packets for specified timeout
  */
 bool checkForCommands(uint16_t timeout_ms) {
+    uint32_t funcEntryMs = millis();
+    Serial.printf("[%lu] checkForCommands() entered\n", funcEntryMs);
+    
     if (!loraInitialized) {
         return false;
     }
     
-    Serial.printf("\n[LoRa RX] Checking for commands (timeout: %dms)...\n", timeout_ms);
+    uint32_t rxStartMs = millis();
+    Serial.printf("[%lu] Starting RX (timeout: %dms)\n", rxStartMs, timeout_ms);
 
     // Put radio in continuous RX mode (no timeout parameter for better reliability)
     int state = radio->startReceive();
     if (state != RADIOLIB_ERR_NONE) {
-        Serial.printf("❌ Failed to enter RX mode (code: %d)\n", state);
+        Serial.printf("[%lu] ❌ Failed to enter RX mode (code: %d)\n", millis(), state);
         return false;
     }
+    
+    Serial.printf("[%lu] Radio in RX mode\n", millis());
 
     // Wait for packet or timeout by polling DIO1 pin directly
     uint32_t startTime = millis();
     while (millis() - startTime < timeout_ms) {
         // Check DIO1 pin for IRQ (packet received)
         if (digitalRead(LORA_DIO1) == HIGH) {
-            Serial.println("📡 DIO1 triggered - packet detected!");
+            Serial.printf("[%lu] 📡 DIO1 triggered - packet detected\n", millis());
             uint8_t rxBuffer[sizeof(LoRaPacketHeader) + LORA_MAX_PAYLOAD_SIZE];
             
             state = radio->readData(rxBuffer, sizeof(rxBuffer));
@@ -284,40 +289,40 @@ bool checkForCommands(uint16_t timeout_ms) {
                 lastRSSI = radio->getRSSI();
                 lastSNR = radio->getSNR();
                 
-                Serial.printf("✅ Packet received: %d bytes\n", rxLen);
-                Serial.printf("  RSSI: %d dBm, SNR: %d dB\n", lastRSSI, lastSNR);
+                Serial.printf("[%lu] ✅ Packet received: %d bytes\n", millis(), rxLen);
+                Serial.printf("[%lu]   RSSI: %d dBm, SNR: %d dB\n", millis(), lastRSSI, lastSNR);
                 
                 // Validate header
                 if (rxLen >= sizeof(LoRaPacketHeader)) {
                     LoRaPacketHeader* header = (LoRaPacketHeader*)rxBuffer;
                     
                     if (validateHeader(header)) {
-                        Serial.printf("  Header valid: Type=0x%02X\n", header->msgType);
+                        Serial.printf("[%lu]   Header valid: Type=0x%02X\n", millis(), header->msgType);
                         
                         // Check if it's a command
                         if (header->msgType == MSG_COMMAND) {
                             // Validate we received the full payload (use header's payloadLen, not full struct size)
                             if (rxLen >= sizeof(LoRaPacketHeader) + header->payloadLen) {
                                 CommandPayload* cmd = (CommandPayload*)(rxBuffer + sizeof(LoRaPacketHeader));
-                                Serial.printf("  📡 Command received: Type=0x%02X, ParamLen=%d\n",
-                                             cmd->cmdType, cmd->paramLen);
+                                Serial.printf("[%lu]   📡 Command received: Type=0x%02X, ParamLen=%d\n",
+                                             millis(), cmd->cmdType, cmd->paramLen);
 
                                 // Process command and return success/failure
                                 bool processed = processCommand(cmd);
                                 return processed;
                             } else {
-                                Serial.printf("  ❌ Incomplete command packet (got %d bytes, expected %d)\n",
-                                             rxLen, sizeof(LoRaPacketHeader) + header->payloadLen);
+                                Serial.printf("[%lu]   ❌ Incomplete command packet (got %d bytes, expected %d)\n",
+                                             millis(), rxLen, sizeof(LoRaPacketHeader) + header->payloadLen);
                             }
                         } else {
-                            Serial.printf("  ⚠️  Not a command (type: 0x%02X)\n", header->msgType);
+                            Serial.printf("[%lu]   ⚠️  Not a command (type: 0x%02X)\n", millis(), header->msgType);
                         }
                     } else {
-                        Serial.println("  ❌ Header validation failed");
+                        Serial.printf("[%lu]   ❌ Header validation failed\n", millis());
                     }
                 }
             } else {
-                Serial.printf("❌ Read failed (code: %d)\n", state);
+                Serial.printf("[%lu] ❌ Read failed (code: %d)\n", millis(), state);
             }
         }
         
@@ -325,7 +330,7 @@ bool checkForCommands(uint16_t timeout_ms) {
     }
 
     // Timeout - no commands received, put radio back in standby
-    Serial.println("⏱️  No commands received (timeout)");
+    Serial.printf("[%lu] No commands received (timeout)\n", millis());
     radio->standby();
     return false;
 }
@@ -336,56 +341,58 @@ bool checkForCommands(uint16_t timeout_ms) {
  */
 bool processCommand(CommandPayload* cmd) {
     if (!cmd) {
-        Serial.println("❌ Invalid command payload");
+        Serial.printf("[%lu] ❌ Invalid command payload\n", millis());
         return false;
     }
     
-    Serial.printf("\n[COMMAND] Processing command type 0x%02X with %d param bytes\n", 
-                  cmd->cmdType, cmd->paramLen);
+    Serial.printf("[%lu] [COMMAND] Processing command type 0x%02X with %d param bytes\n", 
+                  millis(), cmd->cmdType, cmd->paramLen);
     
     bool success = false;
-    char paramStr[64] = "";
-    
-    // Extract parameter string (null-terminated)
-    if (cmd->paramLen > 0 && cmd->paramLen < sizeof(paramStr)) {
-        memcpy(paramStr, cmd->params, cmd->paramLen);
-        paramStr[cmd->paramLen] = '\0';
-        Serial.printf("  Parameters: %s\n", paramStr);
-    }
     
     switch (cmd->cmdType) {
         case CMD_SET_SLEEP: {
-            // Set deep sleep interval (seconds)
-            int newSeconds = atoi(paramStr);
-            if (newSeconds >= 0 && newSeconds <= 3600) {  // 0-1 hour
-                Serial.printf("  ✓ Deep sleep interval set to %d seconds\n", newSeconds);
-                setDeepSleepSeconds(newSeconds);
-                
-                char eventMsg[64];
-                snprintf(eventMsg, sizeof(eventMsg), "Sleep interval changed to %ds", newSeconds);
-                sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
-                
-                success = true;
+            // Set deep sleep interval (seconds) - expects uint16_t
+            if (cmd->paramLen == sizeof(uint16_t)) {
+                uint16_t newSeconds = *(uint16_t*)cmd->params;
+                Serial.printf("  Parameters: %u seconds\n", newSeconds);
+                if (newSeconds >= 0 && newSeconds <= 3600) {  // 0-1 hour
+                    Serial.printf("  ✓ Deep sleep interval set to %u seconds\n", newSeconds);
+                    setDeepSleepSeconds(newSeconds);
+                    
+                    char eventMsg[64];
+                    snprintf(eventMsg, sizeof(eventMsg), "Sleep interval changed to %us", newSeconds);
+                    sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
+                    
+                    success = true;
+                } else {
+                    Serial.printf("  ❌ Invalid sleep value: %u (valid range: 0-3600)\n", newSeconds);
+                }
             } else {
-                Serial.printf("  ❌ Invalid sleep value: %d (valid range: 0-3600)\n", newSeconds);
+                Serial.printf("  ❌ Invalid parameter length: %d (expected 2)\n", cmd->paramLen);
             }
             break;
         }
         
         case CMD_SET_INTERVAL: {
-            // Set sensor read interval (seconds)
-            int newSeconds = atoi(paramStr);
-            if (newSeconds >= 5 && newSeconds <= 3600) {  // 5s - 1 hour
-                Serial.printf("  ✓ Sensor interval set to %d seconds\n", newSeconds);
-                setSensorIntervalSeconds(newSeconds);
-                
-                char eventMsg[64];
-                snprintf(eventMsg, sizeof(eventMsg), "Sensor interval changed to %ds", newSeconds);
-                sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
-                
-                success = true;
+            // Set sensor read interval (seconds) - expects uint16_t
+            if (cmd->paramLen == sizeof(uint16_t)) {
+                uint16_t newSeconds = *(uint16_t*)cmd->params;
+                Serial.printf("  Parameters: %u seconds\n", newSeconds);
+                if (newSeconds >= 5 && newSeconds <= 3600) {  // 5s - 1 hour
+                    Serial.printf("  ✓ Sensor interval set to %u seconds\n", newSeconds);
+                    setSensorIntervalSeconds(newSeconds);
+                    
+                    char eventMsg[64];
+                    snprintf(eventMsg, sizeof(eventMsg), "Sensor interval changed to %us", newSeconds);
+                    sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
+                    
+                    success = true;
+                } else {
+                    Serial.printf("  ❌ Invalid interval value: %u (valid range: 5-3600)\n", newSeconds);
+                }
             } else {
-                Serial.printf("  ❌ Invalid interval value: %d (valid range: 5-3600)\n", newSeconds);
+                Serial.printf("  ❌ Invalid parameter length: %d (expected 2)\n", cmd->paramLen);
             }
             break;
         }
@@ -417,15 +424,20 @@ bool processCommand(CommandPayload* cmd) {
         }
 
         case CMD_SET_BASELINE: {
-            // Set specific baseline value (hPa)
-            float baselineHpa = atof(paramStr);
-            if (baselineHpa > 900 && baselineHpa < 1100) {  // Sanity check
-                float baselinePa = baselineHpa * 100.0;  // Convert hPa to Pa
-                Serial.printf("  ✓ Setting baseline to %.2f hPa\n", baselineHpa);
-                setPressureBaseline(baselinePa);
-                success = true;
+            // Set specific baseline value (hPa) - expects float (4 bytes)
+            if (cmd->paramLen == sizeof(float)) {
+                float baselineHpa = *(float*)cmd->params;
+                Serial.printf("  Parameters: %.2f hPa\n", baselineHpa);
+                if (baselineHpa > 900 && baselineHpa < 1100) {  // Sanity check
+                    float baselinePa = baselineHpa * 100.0;  // Convert hPa to Pa
+                    Serial.printf("  ✓ Setting baseline to %.2f hPa\n", baselineHpa);
+                    setPressureBaseline(baselinePa);
+                    success = true;
+                } else {
+                    Serial.printf("  ❌ Invalid baseline: %.2f (valid range: 900-1100 hPa)\n", baselineHpa);
+                }
             } else {
-                Serial.printf("  ❌ Invalid baseline: %.2f (valid range: 900-1100 hPa)\n", baselineHpa);
+                Serial.printf("  ❌ Invalid parameter length: %d (expected 4)\n", cmd->paramLen);
             }
             break;
         }
@@ -503,10 +515,13 @@ bool sendStatusMessage() {
     status.loraRssi = lastRSSI;
     status.loraSNR = lastSNR;
     status.freeHeap = ESP.getFreeHeap() / 1024;
-    status.sensorFailures = 0;  // TODO: Track sensor failures
+    status.sensorFailures = getSensorFailures();
     status.txFailures = txFailures;
     status.lastSuccessTx = lastSuccessTx;
     status.deepSleepSec = getDeepSleepSeconds();
+    status.sensorIntervalSec = getSensorIntervalSeconds();
+    status.timeOnAir = lastTimeOnAir;
+    status.txPower = txPowerDbm;
     
     // Include device name from config
     String deviceName = getDeviceName();
