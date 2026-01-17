@@ -1,31 +1,32 @@
 # ESP32 LoRa Sensor - Wiring Guide
 
 ## Hardware
-- **ESP32 LoRa V3 Module** (SX1262, 0.96" OLED)
+- **Heltec WiFi LoRa 32 V3** (ESP32-S3, SX1262, 0.96" OLED)
 - **BME280 Breakout Board** (I2C)
 - **3.7V LiPo Battery** (with voltage divider for monitoring)
 
 ## Pin Configuration Summary
 
-Based on the ESP32 LoRa V3 pinout diagram:
+Based on the **Heltec WiFi LoRa 32 V3 (ESP32-S3)** pinout:
 
 ### LoRa SX1262 (Built-in - No wiring needed)
-| Function | GPIO | Header | Notes |
-|----------|------|--------|-------|
-| MISO     | 19   | J3     | SPI data in |
-| MOSI     | 27   | J3     | SPI data out |
-| SCK      | 18   | J2     | SPI clock |
-| NSS/CS   | 5    | J3     | Chip select |
-| DIO1     | 34   | J2     | Interrupt |
-| BUSY     | 35   | J2     | Busy signal |
-| RST      | 14   | J3     | Reset |
+| Function | GPIO | Notes |
+|----------|------|-------|
+| MISO     | 11   | SPI data in |
+| MOSI     | 10   | SPI data out |
+| SCK      | 9    | SPI clock |
+| NSS/CS   | 8    | Chip select |
+| DIO1     | 14   | Interrupt |
+| BUSY     | 13   | Busy signal |
+| RST      | 12   | Reset |
 
 ### OLED Display (Built-in - No wiring needed)
-| Function | GPIO | Header | Notes |
-|----------|------|--------|-------|
-| SDA      | 4    | -      | I2C data |
-| SCL      | 15   | -      | I2C clock |
-| RST      | 21   | J2     | Reset |
+| Function | GPIO | Notes |
+|----------|------|-------|
+| SDA      | 17   | I2C data |
+| SCL      | 18   | I2C clock |
+| RST      | 21   | Reset |
+| Address  | 0x3C | I2C address |
 
 ### BME280 Sensor (External - Wiring Required)
 
@@ -128,9 +129,9 @@ If you experience "sensor not found" errors, try changing the address in `device
 ### OLED conflicts
 
 If OLED doesn't work:
-- Built-in OLED uses GPIO 4 (SDA) and GPIO 15 (SCL)
-- BME280 uses separate GPIO 33 (SDA) and GPIO 25 (SCL)
-- These should not conflict
+- Built-in OLED uses GPIO 17 (SDA) and GPIO 18 (SCL)
+- BME280 uses separate GPIO 33 (SDA) and GPIO 26 (SCL)
+- These should not conflict (separate I2C buses)
 
 ### Battery reading incorrect
 
@@ -147,25 +148,27 @@ If OLED doesn't work:
    - GPIO36 is ADC1_CH0 (VP - Voltage Positive input)
    - Input-only pin, no internal pullup available
 
-## GPIO Usage Summary
+## GPIO Usage Summary (Heltec WiFi LoRa 32 V3)
 
 | GPIO | Function | Available? |
 |------|----------|------------|
-| 4    | OLED SDA | Used (built-in) |
-| 5    | LoRa NSS | Used (built-in) |
-| 14   | LoRa RST | Used (built-in) |
-| 15   | OLED SCL | Used (built-in) |
-| 18   | LoRa SCK | Used (built-in) |
-| 19   | LoRa MISO| Used (built-in) |
+| 8    | LoRa NSS | Used (built-in) |
+| 9    | LoRa SCK | Used (built-in) |
+| 10   | LoRa MOSI| Used (built-in) |
+| 11   | LoRa MISO| Used (built-in) |
+| 12   | LoRa RST | Used (built-in) |
+| 13   | LoRa BUSY| Used (built-in) |
+| 14   | LoRa DIO1| Used (built-in) |
+| 17   | OLED SDA | Used (built-in) |
+| 18   | OLED SCL | Used (built-in) |
 | 21   | OLED RST | Used (built-in) |
 | 26   | BME280 SCL| **Used (external)** |
-| 27   | LoRa MOSI| Used (built-in) |
 | 33   | BME280 SDA| **Used (external)** |
-| 34   | LoRa DIO1| Used (built-in) |
-| 35   | LoRa BUSY| Used (built-in) |
-| 36   | Battery  | **Used (external)** |
+| 36   | Vext Ctrl / Battery ADC | **Used (see note)** |
 
-**Available GPIOs for expansion:** 0, 2, 12, 13, 26, 32, 39
+**Note:** GPIO 36 serves dual purpose - Vext power control and battery ADC input. The Heltec V3 uses this pin for peripheral power control.
+
+**Available GPIOs for expansion:** 0, 2, 32, 39
 
 ## References
 
