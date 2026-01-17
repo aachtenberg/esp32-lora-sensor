@@ -110,6 +110,15 @@ bool readSensorData(ReadingsPayload* readings) {
             return false;
         }
         delay(50);
+        // Reapply the same sampling configuration used during initial setup
+        bme280.setSampling(
+            Adafruit_BME280::MODE_NORMAL,        // Operating Mode
+            Adafruit_BME280::SAMPLING_X2,        // Temp oversampling
+            Adafruit_BME280::SAMPLING_X16,       // Pressure oversampling
+            Adafruit_BME280::SAMPLING_X1,        // Humidity oversampling
+            Adafruit_BME280::FILTER_X4,          // Filtering
+            Adafruit_BME280::STANDBY_MS_1000     // Standby time
+        );
         bme_temp = bme280.getTemperatureSensor();
         bme_pressure = bme280.getPressureSensor();
         bme_humidity = bme280.getHumiditySensor();
@@ -154,8 +163,21 @@ bool readSensorData(ReadingsPayload* readings) {
             sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "BME280 invalid data - recovery failed");
             return false;
         }
-        // Try reading again after recovery
         delay(100);
+        // Reapply sensor sampling configuration after successful reinitialization
+        bme280.setSampling(
+            Adafruit_BME280::MODE_NORMAL,
+            Adafruit_BME280::SAMPLING_X2,   // temperature oversampling
+            Adafruit_BME280::SAMPLING_X16,  // pressure oversampling
+            Adafruit_BME280::SAMPLING_X1,   // humidity oversampling
+            Adafruit_BME280::FILTER_X4,
+            Adafruit_BME280::STANDBY_MS_1000
+        );
+        // Update sensor pointers after reinitialization
+        bme_temp = bme280.getTemperatureSensor();
+        bme_pressure = bme280.getPressureSensor();
+        bme_humidity = bme280.getHumiditySensor();
+        // Try reading again after recovery
         bme_temp->getEvent(&temp_event);
         bme_pressure->getEvent(&pressure_event);
         bme_humidity->getEvent(&humidity_event);

@@ -356,7 +356,7 @@ bool processCommand(CommandPayload* cmd) {
             if (cmd->paramLen == sizeof(uint16_t)) {
                 uint16_t newSeconds = *(uint16_t*)cmd->params;
                 Serial.printf("  Parameters: %u seconds\n", newSeconds);
-                if (newSeconds >= 0 && newSeconds <= 3600) {  // 0-1 hour
+                if (newSeconds <= 3600) {  // 0-1 hour
                     Serial.printf("  ✓ Deep sleep interval set to %u seconds\n", newSeconds);
                     setDeepSleepSeconds(newSeconds);
                     
