@@ -17,6 +17,8 @@ Battery-powered environmental sensor using BME280 and LoRa communication.
 - **Device name propagation**: Auto-sends name to gateway in status messages
 - **Location field**: Prepared for future GPS integration
 - Low-power operation with configurable sleep intervals
+- **Configurable sensor interval**: Reading frequency (5-3600s) via LoRa command
+- **I2C error recovery**: Automatic detection and recovery from BME280 communication failures
 - **Status messages**: Sent every 5 wake cycles (~7.5 min at 90s interval)
 - **Event messages**: Startup, errors, config changes
 - Battery voltage and percentage monitoring
@@ -45,11 +47,12 @@ BME280 Sensor (I2C - external, separate bus):
   SDA = 33, SCL = 26
   BME280 addr = 0x76
 
-Battery: GPIO 36 (ADC)
 Vext Control: GPIO 36 (LOW = peripherals ON)
+Battery ADC: GPIO 36 (shared with Vext)
 ```
 
 > **Note:** The BME280 uses a separate I2C bus from the built-in OLED to avoid conflicts.
+> GPIO 36 serves dual purpose on the Heltec V3 - both Vext power control and battery ADC input.
 
 ## Quick Start
 
@@ -104,7 +107,8 @@ Press 'C' within 5 seconds of boot to enter config mode:
 
 Configuration is stored in `/data/` (LittleFS filesystem):
 - `device_name.txt` - Device name sent to gateway (default: "BME280-LoRa-001")
-- `deep_sleep_seconds.txt` - Sleep interval (default: 90 seconds)
+- `deep_sleep_seconds.txt` - Sleep interval between wake cycles (default: 90 seconds)
+- `sensor_interval.txt` - Sensor reading interval during wake cycle (default: 30 seconds)
 - `pressure_baseline.txt` - Pressure baseline in hPa (0.0 = disabled)
 
 **Device name propagation:**
@@ -210,6 +214,7 @@ pio run -t clean
 - Check BME280 I2C wiring (SDA=33, SCL=26 on Heltec V3)
 - Verify BME280 address (0x76 if SDO low, 0x77 if SDO high)
 - Ensure Vext is enabled (GPIO 36 LOW)
+- The firmware includes automatic I2C error recovery - if readings fail, it will power cycle the sensor and reinitialize
 
 ### LoRa not transmitting
 - Verify antenna is connected (built-in on Heltec V3)
@@ -224,6 +229,13 @@ pio run -t clean
 ## Related Projects
 
 - [esp32-lora-gateway](../esp32-lora-gateway/) - Gateway for receiving sensor data
+
+## Shared Components
+
+Both the sensor and gateway share:
+- **Protocol library**: `lib/LoRaProtocol/lora_protocol.h` - Binary packet format definitions
+- **LoRa configuration**: Must match exactly (frequency, spreading factor, bandwidth, sync word)
+- **Hardware**: Heltec WiFi LoRa 32 V3 (ESP32-S3 with built-in SX1262)
 
 ## License
 
