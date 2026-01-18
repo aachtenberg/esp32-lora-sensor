@@ -4,12 +4,18 @@
 #include <Arduino.h>
 #include "lora_protocol.h"
 
-// Initialize BME280 sensor
+// Initialize sensor (BME280 or DS18B20 based on compile-time flag)
 bool initSensor();
 
 // Read sensor data and populate readings payload
 // Returns true on success, false on failure
 bool readSensorData(ReadingsPayload* readings);
+
+// Get sensor failure count
+uint16_t getSensorFailures();
+
+#ifdef SENSOR_TYPE_BME280
+// BME280-specific functions (pressure baseline tracking)
 
 // Get current pressure baseline (hPa)
 float getPressureBaseline();
@@ -23,7 +29,6 @@ void calibrateBaseline();
 // Clear baseline tracking
 void clearBaseline();
 
-// Get sensor failure count
-uint16_t getSensorFailures();
+#endif // SENSOR_TYPE_BME280
 
 #endif // SENSOR_MANAGER_H

@@ -1,17 +1,254 @@
 /**
- * Sensor Manager - BME280 Environmental Sensor
- * Handles BME280 initialization, reading, and pressure baseline tracking
- * Migrated from esp12f_ds18b20_temp_sensor/bme280-sensor
+ * Sensor Manager - Multi-sensor support
+ * Supports BME280 environmental sensor or DS18B20 temperature sensor
+ * Selected via compile-time flag: SENSOR_TYPE_BME280 or SENSOR_TYPE_DS18B20
  */
 
 #include "sensor_manager.h"
 #include "device_config.h"
 #include "lora_comm.h"
+#include <FS.h>
+#include <LittleFS.h>
+
+// Sensor failure counter (shared)
+static uint16_t sensorFailures = 0;
+
+// ====================================================================
+// DS18B20 Temperature Sensor Implementation
+// ====================================================================
+#ifdef SENSOR_TYPE_DS18B20
+
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// OneWire bus and DallasTemperature sensor
+static OneWire oneWire(DS18B20_PIN);
+static DallasTemperature ds18b20(&oneWire);
+
+// Forward declaration
+static void resetOneWire();
+
+static void resetOneWire() {
+    Serial.println("[SENSOR] Resetting 1-Wire bus...");
+    digitalWrite(VEXT_CTRL, HIGH); // Power off
+    delay(200);
+    digitalWrite(VEXT_CTRL, LOW);  // Power on
+    delay(100);
+    ds18b20.begin();
+    delay(50);
+}
+
+bool initSensor() {
+    Serial.println("[SENSOR] Initializing DS18B20...");
+
+    ds18b20.begin();
+    delay(100);
+
+    int deviceCount = ds18b20.getDeviceCount();
+    if (deviceCount == 0) {
+        Serial.printf("[SENSOR] ERROR: No DS18B20 sensors found on GPIO%d!\n", DS18B20_PIN);
+        Serial.println("[SENSOR] Check wiring: Data pin with 4.7K pull-up to 3.3V");
+        return false;
+    }
+
+    // Set resolution to 12-bit (default, highest precision)
+    ds18b20.setResolution(12);
+
+    Serial.printf("[SENSOR] DS18B20 initialized: %d sensor(s) found on GPIO%d\n",
+                  deviceCount, DS18B20_PIN);
+
+    return true;
+}
+
+bool readSensorData(ReadingsPayload* readings) {
+    if (!readings) {
+        Serial.println("[SENSOR] ERROR: NULL readings pointer");
+        return false;
+    }
+
+    // Request temperature conversion
+    ds18b20.requestTemperatures();
+
+    // Read temperature (blocking, but fast with 12-bit resolution ~750ms)
+    float tempC = ds18b20.getTempCByIndex(0);
+
+    // Check for read error
+    if (tempC == DEVICE_DISCONNECTED_C) {
+        Serial.println("[SENSOR] ERROR: DS18B20 read failed (disconnected)");
+        sensorFailures++;
+
+        // Attempt recovery
+        resetOneWire();
+        ds18b20.requestTemperatures();
+        tempC = ds18b20.getTempCByIndex(0);
+
+        if (tempC == DEVICE_DISCONNECTED_C) {
+            Serial.println("[SENSOR] ERROR: Recovery failed");
+            sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "DS18B20 disconnected - recovery failed");
+            return false;
+        }
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_WARNING, "DS18B20 recovered");
+    }
+
+    // Validate temperature range (-55 to +125°C is DS18B20 spec)
+    if (tempC < -55.0 || tempC > 125.0) {
+        Serial.printf("[SENSOR] ERROR: Invalid temperature: %.2f°C\n", tempC);
+        sensorFailures++;
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "DS18B20 invalid reading");
+        return false;
+    }
+
+    // Populate payload
+    readings->timestamp = millis() / 1000;  // Uptime in seconds
+    readings->temperature = (int16_t)(tempC * 100.0);  // °C * 100
+
+    // DS18B20 doesn't have humidity, pressure, or altitude
+    readings->humidity = 0;
+    readings->pressure = 0;
+    readings->altitude = 0;
+    readings->pressureChange = 0;
+    readings->pressureTrend = 1;  // Steady (N/A for DS18B20)
+
+    // Battery will be filled by power_manager
+    readings->batteryVoltage = 0;
+    readings->batteryPercent = 0;
+
+    // Debug output
+    Serial.println("[SENSOR] DS18B20 Reading:");
+    Serial.printf("  Temperature: %.2f°C\n", tempC);
+
+    return true;
+}
+
+uint16_t getSensorFailures() {
+    return sensorFailures;
+}
+
+// ====================================================================
+// DHT22 Temperature and Humidity Sensor Implementation
+// ====================================================================
+#elif defined(SENSOR_TYPE_DHT22)
+
+#include <DHT.h>
+
+// DHT22 sensor instance
+static DHT dht22(DHT22_PIN, DHT22);
+
+// Forward declaration
+static void resetDHT22();
+
+static void resetDHT22() {
+    Serial.println("[SENSOR] Resetting DHT22 power...");
+    digitalWrite(VEXT_CTRL, HIGH); // Power off
+    delay(500);  // DHT22 needs longer recovery time
+    digitalWrite(VEXT_CTRL, LOW);  // Power on
+    delay(1000); // DHT22 needs 1 second to stabilize
+    dht22.begin();
+}
+
+bool initSensor() {
+    Serial.println("[SENSOR] Initializing DHT22...");
+
+    dht22.begin();
+    delay(2000);  // DHT22 needs 2 seconds initial stabilization
+
+    // Try a test read to verify sensor is connected
+    float testTemp = dht22.readTemperature();
+    if (isnan(testTemp)) {
+        Serial.printf("[SENSOR] ERROR: DHT22 not responding on GPIO%d!\n", DHT22_PIN);
+        Serial.println("[SENSOR] Check wiring: Data pin to GPIO, VCC to 3.3V, GND to GND");
+        Serial.println("[SENSOR] Note: DHT22 has built-in pull-up, no external resistor needed");
+        return false;
+    }
+
+    Serial.printf("[SENSOR] DHT22 initialized on GPIO%d\n", DHT22_PIN);
+    Serial.printf("[SENSOR] Test reading: %.2f°C\n", testTemp);
+
+    return true;
+}
+
+bool readSensorData(ReadingsPayload* readings) {
+    if (!readings) {
+        Serial.println("[SENSOR] ERROR: NULL readings pointer");
+        return false;
+    }
+
+    // Read temperature and humidity
+    // Note: DHT22 has 2-second minimum sampling period
+    float tempC = dht22.readTemperature();
+    float humidity = dht22.readHumidity();
+
+    // Check for read errors
+    if (isnan(tempC) || isnan(humidity)) {
+        Serial.println("[SENSOR] ERROR: DHT22 read failed (NaN)");
+        sensorFailures++;
+
+        // Attempt recovery
+        resetDHT22();
+        delay(2000);  // Wait for sensor to stabilize
+        
+        tempC = dht22.readTemperature();
+        humidity = dht22.readHumidity();
+
+        if (isnan(tempC) || isnan(humidity)) {
+            Serial.println("[SENSOR] ERROR: Recovery failed");
+            sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "DHT22 read failed - recovery failed");
+            return false;
+        }
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_WARNING, "DHT22 recovered");
+    }
+
+    // Validate temperature range (-40 to +80°C is DHT22 spec)
+    if (tempC < -40.0 || tempC > 80.0) {
+        Serial.printf("[SENSOR] ERROR: Invalid temperature: %.2f°C\n", tempC);
+        sensorFailures++;
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "DHT22 invalid temperature");
+        return false;
+    }
+
+    // Validate humidity range (0-100% is DHT22 spec)
+    if (humidity < 0.0 || humidity > 100.0) {
+        Serial.printf("[SENSOR] ERROR: Invalid humidity: %.2f%%\n", humidity);
+        sensorFailures++;
+        sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "DHT22 invalid humidity");
+        return false;
+    }
+
+    // Populate payload
+    readings->timestamp = millis() / 1000;  // Uptime in seconds
+    readings->temperature = (int16_t)(tempC * 100.0);  // °C * 100
+    readings->humidity = (uint16_t)(humidity * 100.0);  // % * 100
+
+    // DHT22 doesn't have pressure or altitude
+    readings->pressure = 0;
+    readings->altitude = 0;
+    readings->pressureChange = 0;
+    readings->pressureTrend = 1;  // Steady (N/A for DHT22)
+
+    // Battery will be filled by power_manager
+    readings->batteryVoltage = 0;
+    readings->batteryPercent = 0;
+
+    // Debug output
+    Serial.println("[SENSOR] DHT22 Reading:");
+    Serial.printf("  Temperature: %.2f°C\n", tempC);
+    Serial.printf("  Humidity: %.2f%%\n", humidity);
+
+    return true;
+}
+
+uint16_t getSensorFailures() {
+    return sensorFailures;
+}
+
+// ====================================================================
+// BME280 Environmental Sensor Implementation
+// ====================================================================
+#else // SENSOR_TYPE_BME280 (default)
+
 #include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
-#include <FS.h>
-#include <LittleFS.h>
 
 // BME280 sensor instance
 Adafruit_BME280 bme280;
@@ -22,9 +259,6 @@ TwoWire I2C_BME = TwoWire(1);
 
 // Pressure baseline for weather tracking
 static float pressureBaseline = 0.0;  // 0 = disabled
-
-// Sensor failure counter
-static uint16_t sensorFailures = 0;
 
 // Forward declarations
 static float loadPressureBaseline();
@@ -326,3 +560,5 @@ static void savePressureBaseline(float baseline) {
 uint16_t getSensorFailures() {
     return sensorFailures;
 }
+
+#endif // SENSOR_TYPE_BME280

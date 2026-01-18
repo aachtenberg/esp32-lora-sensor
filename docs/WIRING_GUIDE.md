@@ -2,7 +2,7 @@
 
 ## Hardware
 - **Heltec WiFi LoRa 32 V3** (ESP32-S3, SX1262, 0.96" OLED)
-- **BME280 Breakout Board** (I2C)
+- **Sensor**: BME280 (I2C) or DS18B20 (1-Wire) - compile-time selection
 - **3.7V LiPo Battery** (with voltage divider for monitoring)
 
 ## Pin Configuration Summary
@@ -46,7 +46,59 @@ SCL             → GPIO26 (pin 15)
 - BME280_SCL: GPIO 26 (Header J2, pin 15)
 - BME280_ADDR: 0x76 (default, or 0x77 if SDO pulled high)
 
-**Note:** We use GPIO 33/26 for BME280 to avoid conflicts with the built-in OLED display which uses GPIO 4/15.
+**Note:** We use GPIO 33/26 for BME280 to avoid conflicts with the built-in OLED display which uses GPIO 17/18.
+
+### DS18B20 Sensor (External - Wiring Required)
+
+**Connect DS18B20 temperature sensor:**
+
+```
+DS18B20 → ESP32 LoRa V3
+──────────────────────────
+VCC (3.3V)  → 3V
+GND         → GND
+DATA        → GPIO4 (with 4.7K pull-up to 3.3V)
+```
+
+**Wiring diagram with pull-up resistor:**
+```
+        3.3V
+          │
+         [4.7K]
+          │
+GPIO4 ────┼──── DS18B20 DATA
+          │
+         GND ── DS18B20 GND
+          │
+        3.3V ── DS18B20 VCC
+```
+
+**Pin assignment in code:**
+- DS18B20_PIN: GPIO 4
+
+**Note:** The 4.7K pull-up resistor is required for reliable 1-Wire communication. Some DS18B20 breakout boards include this resistor.
+
+### DHT22 Sensor (External - Wiring Required)
+
+**Connect DHT22/AM2302 temperature and humidity sensor:**
+
+```
+DHT22/AM2302 → ESP32 LoRa V3
+─────────────────────────────
+VCC (3.3V)  → 3V
+GND         → GND
+DATA        → GPIO35
+```
+
+**Pin assignment in code:**
+- DHT22_PIN: GPIO 35
+
+**Note:** DHT22 sensors have a built-in pull-up resistor, so no external resistor is needed. If using a bare DHT22 chip (not a breakout module), add a 10K pull-up resistor between DATA and VCC.
+
+**Important timing notes:**
+- DHT22 requires 2 seconds initial stabilization after power-on
+- Minimum 2-second interval between readings
+- Power cycling requires 500ms off + 1 second stabilization
 
 ### Battery Monitoring (Optional)
 
@@ -107,6 +159,25 @@ If you experience "sensor not found" errors, try changing the address in `device
 
 ## Troubleshooting
 
+### DS18B20 not detected
+
+1. **Check wiring:**
+   - Verify data pin is connected to GPIO 4
+   - Ensure 4.7K pull-up resistor is connected between DATA and 3.3V
+   - Check power connections (3.3V and GND)
+
+2. **Check pull-up resistor:**
+   - Must be 4.7K ohm (not 10K)
+   - Some breakout boards include this resistor built-in
+
+3. **Test with multiple sensors:**
+   - DS18B20 supports multiple sensors on one bus
+   - Each sensor has unique address
+
+4. **Verify sensor is genuine:**
+   - Counterfeit DS18B20 sensors are common
+   - May not work reliably or give incorrect readings
+
 ### BME280 not detected
 
 1. **Check I2C address:**
@@ -162,16 +233,19 @@ If OLED doesn't work:
 | 17   | OLED SDA | Used (built-in) |
 | 18   | OLED SCL | Used (built-in) |
 | 21   | OLED RST | Used (built-in) |
-| 26   | BME280 SCL| **Used (external)** |
-| 33   | BME280 SDA| **Used (external)** |
+| 4    | DS18B20 Data | **Used (external, DS18B20 build)** |
+| 26   | BME280 SCL| **Used (external, BME280 build)** |
+| 33   | BME280 SDA| **Used (external, BME280 build)** |
 | 36   | Vext Ctrl / Battery ADC | **Used (see note)** |
 
 **Note:** GPIO 36 serves dual purpose - Vext power control and battery ADC input. The Heltec V3 uses this pin for peripheral power control.
 
-**Available GPIOs for expansion:** 0, 2, 32, 39
+**Available GPIOs for expansion:** 0, 2, 32, 39 (and GPIO 4/26/33 if not using that sensor)
 
 ## References
 
 - [ESP32 Pinout Reference](https://randomnerdtutorials.com/esp32-pinout-reference-gpios/)
 - [BME280 Datasheet](https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf)
 - [Adafruit BME280 Guide](https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout)
+- [DS18B20 Datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/DS18B20.pdf)
+- [Dallas Temperature Library](https://github.com/milesburton/Arduino-Temperature-Control-Library)

@@ -25,6 +25,14 @@
 #define BME280_SCL     26   // I2C SCL (GPIO26 - Header J2, pin 15)
 #define BME280_ADDR    0x76 // I2C Address (0x76 if SDO low, 0x77 if SDO high)
 
+// DS18B20 Temperature Sensor (1-Wire - External)
+// Requires 4.7K pull-up resistor between data pin and 3.3V
+#define DS18B20_PIN    4    // 1-Wire data pin (GPIO4 - free on Heltec V3)
+
+// DHT22 Temperature and Humidity Sensor (1-Wire - External)
+// AM2302 is the wired version of DHT22
+#define DHT22_PIN      35   // Data pin (GPIO35 - free on Heltec V3)
+
 // BME280 Sampling Configuration
 // See Adafruit_BME280.h for mode/sampling values
 #define BME280_SAMPLING_MODE    0x03  // Normal mode
