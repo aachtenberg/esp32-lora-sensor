@@ -11,6 +11,10 @@
 #include "display_manager.h"
 #endif
 
+#ifdef GPS_ENABLED
+#include "gps_manager.h"
+#endif
+
 // Global state
 uint16_t g_sequenceNumber = 0;
 uint32_t g_wakeCount = 0;
@@ -56,6 +60,13 @@ void setup() {
         // TODO: Store error and retry on next wake
     }
 
+#ifdef GPS_ENABLED
+    // Initialize GPS module
+    Serial.println("Initializing GPS module...");
+    initGPS();
+    Serial.println("GPS initialization complete");
+#endif
+
 #ifdef OLED_ENABLED
     // Initialize OLED display
     Serial.println("Initializing OLED display...");
@@ -89,6 +100,20 @@ void loop() {
         // TODO: Increment error counter
         // For now, continue with invalid data marked
     }
+
+#ifdef GPS_ENABLED
+    // Update GPS and collect location data (if available)
+    Serial.println("Updating GPS location...");
+    GPSData gpsData;
+    if (updateGPS(&gpsData)) {
+        Serial.printf("GPS: %.6f, %.6f (alt: %d m, sats: %d, HDOP: %.1f)\n",
+                     gpsData.latitude, gpsData.longitude, 
+                     gpsData.altitude_m, gpsData.satellites, gpsData.hdop);
+        // TODO: Add GPS data to readings payload for transmission
+    } else {
+        Serial.println("GPS: No fix yet");
+    }
+#endif
 
     // Display on OLED (if enabled)
 #ifdef OLED_ENABLED
