@@ -1,18 +1,26 @@
 # ESP32 LoRa Sensor
 
-Battery-powered environmental sensor using BME280 and LoRa communication.
+Battery-powered environmental sensor using LoRa communication. Supports **BME280** (temperature, humidity, pressure), **DHT22** (temperature, humidity), or **DS18B20** (temperature only) sensors.
 
 ## Hardware
 
 - **Board**: Heltec WiFi LoRa 32 V3 (ESP32-S3) with built-in SX1262
 - **LoRa**: SX1262 LoRa module (863-928 MHz)
-- **Sensor**: BME280 (temperature, humidity, pressure) - external breakout
+- **Sensor**: BME280, DHT22, or DS18B20 (compile-time selection)
 - **Display**: 0.96" OLED SSD1306 (I2C) - built-in
 - **Power**: 3.7V LiPo battery
 
+## Supported Sensors
+
+| Sensor | Build Environment | Readings | Notes |
+|--------|-------------------|----------|-------|
+| **BME280** | `esp32-lora-sensor` (default) | Temperature, humidity, pressure, altitude | - |
+| **DHT22/AM2302** | `esp32-lora-sensor-dht22` | Temperature, humidity | Uses GPIO1 (TX), minimal impact on serial debugging |
+| **DS18B20** | `esp32-lora-sensor-ds18b20` | Temperature only | - |
+
 ## Features
 
-- BME280 environmental sensing (temperature, humidity, pressure, altitude)
+- **Multi-sensor support**: BME280 environmental, DHT22 temp/humidity, or DS18B20 temperature sensor
 - LoRa peer-to-peer communication with gateway
 - **Device name propagation**: Auto-sends name to gateway in status messages
 - **Location field**: Prepared for future GPS integration
@@ -47,6 +55,12 @@ BME280 Sensor (I2C - external, separate bus):
   SDA = 33, SCL = 26
   BME280 addr = 0x76
 
+DS18B20 Sensor (1-Wire - external):
+  Data = GPIO 4 (with 4.7K pull-up to 3.3V)
+
+DHT22 Sensor (1-Wire - external):
+  Data = GPIO 1 (TX pin, serial works normally except during brief sensor reads)
+
 Vext Control: GPIO 36 (LOW = peripherals ON)
 Battery ADC: GPIO 36 (shared with Vext)
 ```
@@ -64,9 +78,22 @@ pip install platformio
 
 ### 2. Clone and Build
 
+**BME280 Sensor (default):**
 ```bash
 cd ~/repos/esp32-lora-sensor
-pio run
+pio run -e esp32-lora-sensor
+```
+
+**DS18B20 Sensor:**
+```bash
+cd ~/repos/esp32-lora-sensor
+pio run -e esp32-lora-sensor-ds18b20
+```
+
+**DHT22 Sensor:**
+```bash
+cd ~/repos/esp32-lora-sensor
+pio run -e esp32-lora-sensor-dht22
 ```
 
 ### 3. Upload Filesystem (First Time Only)
@@ -79,8 +106,19 @@ This uploads the configuration files in `data/` to the ESP32.
 
 ### 4. Upload Firmware
 
+**BME280 Sensor:**
 ```bash
-pio run -t upload
+pio run -e esp32-lora-sensor -t upload
+```
+
+**DS18B20 Sensor:**
+```bash
+pio run -e esp32-lora-sensor-ds18b20 -t upload
+```
+
+**DHT22 Sensor:**
+```bash
+pio run -e esp32-lora-sensor-dht22 -t upload
 ```
 
 ### 5. Monitor Serial Output
@@ -195,11 +233,19 @@ esp32-lora-sensor/
 ### Building
 
 ```bash
-# Build
-pio run
+# Build BME280 firmware (default)
+pio run -e esp32-lora-sensor
 
-# Upload firmware
-pio run -t upload
+# Build DS18B20 firmware
+pio run -e esp32-lora-sensor-ds18b20
+
+# Build DHT22 firmware
+pio run -e esp32-lora-sensor-dht22
+
+# Upload firmware (specify environment)
+pio run -e esp32-lora-sensor -t upload
+pio run -e esp32-lora-sensor-ds18b20 -t upload
+pio run -e esp32-lora-sensor-dht22 -t upload
 
 # Upload filesystem
 pio run -t uploadfs
@@ -210,11 +256,24 @@ pio run -t clean
 
 ## Troubleshooting
 
-### Sensor not reading
+### BME280 not reading
 - Check BME280 I2C wiring (SDA=33, SCL=26 on Heltec V3)
 - Verify BME280 address (0x76 if SDO low, 0x77 if SDO high)
 - Ensure Vext is enabled (GPIO 36 LOW)
 - The firmware includes automatic I2C error recovery - if readings fail, it will power cycle the sensor and reinitialize
+
+### DS18B20 not reading
+- Check DS18B20 wiring: Data pin to GPIO 4 with 4.7K pull-up resistor to 3.3V
+- Ensure Vext is enabled (GPIO 36 LOW)
+- The firmware includes automatic 1-Wire bus recovery on read failures
+
+### DHT22 not reading
+- Check DHT22 wiring: Data pin to GPIO 1 (TX), VCC to 3.3V, GND to GND
+- DHT22 has built-in pull-up resistor, no external resistor needed
+- Ensure 2-second stabilization time after power-on is met
+- The firmware includes automatic power cycling recovery on read failures
+- Verify sensor is DHT22 (AM2302), not DHT11 - they use different protocols
+- Note: GPIO1 is TX pin - serial output works normally except during brief sensor reads (~5ms every 30s)
 
 ### LoRa not transmitting
 - Verify antenna is connected (built-in on Heltec V3)

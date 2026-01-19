@@ -417,13 +417,18 @@ bool processCommand(CommandPayload* cmd) {
         }
         
         case CMD_CALIBRATE: {
+#ifdef SENSOR_TYPE_BME280
             Serial.println("  ✓ Pressure calibration command received");
             calibrateBaseline();
             success = true;
+#else
+            Serial.println("  ⚠️  Calibrate command not supported for this sensor type");
+#endif
             break;
         }
 
         case CMD_SET_BASELINE: {
+#ifdef SENSOR_TYPE_BME280
             // Set specific baseline value (hPa) - expects float (4 bytes)
             if (cmd->paramLen == sizeof(float)) {
                 float baselineHpa = *(float*)cmd->params;
@@ -439,13 +444,20 @@ bool processCommand(CommandPayload* cmd) {
             } else {
                 Serial.printf("  ❌ Invalid parameter length: %d (expected 4)\n", cmd->paramLen);
             }
+#else
+            Serial.println("  ⚠️  Set baseline command not supported for this sensor type");
+#endif
             break;
         }
 
         case CMD_CLEAR_BASELINE: {
+#ifdef SENSOR_TYPE_BME280
             Serial.println("  ✓ Clear pressure baseline command received");
             clearBaseline();
             success = true;
+#else
+            Serial.println("  ⚠️  Clear baseline command not supported for this sensor type");
+#endif
             break;
         }
         
