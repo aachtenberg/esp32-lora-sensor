@@ -87,17 +87,23 @@ DHT22/AM2302 → ESP32 LoRa V3
 ─────────────────────────────
 VCC (3.3V)  → 3V
 GND         → GND
-DATA        → GPIO35
+DATA        → GPIO1 (TX pin)
 ```
 
 **Pin assignment in code:**
-- DHT22_PIN: GPIO 35
+- DHT22_PIN: GPIO 1 (TX pin)
 
-**Note:** DHT22 sensors have a built-in pull-up resistor, so no external resistor is needed. If using a bare DHT22 chip (not a breakout module), add a 10K pull-up resistor between DATA and VCC.
+**⚠️ Important Notes:**
+- GPIO1 is the TX (UART transmit) pin, so **serial output will not work** while DHT22 is connected
+- GPIO35 was originally planned but it's connected to the white LED on Heltec V3
+- GPIO37 is not reliably accessible on this board revision
+- DHT22 sensors have a built-in pull-up resistor, so no external resistor is needed
+- If using a bare DHT22 chip (not a breakout module), add a 10K pull-up resistor between DATA and VCC
 
 **Important timing notes:**
 - DHT22 requires 2 seconds initial stabilization after power-on
 - Minimum 2-second interval between readings
+- Serial debugging not available with DHT22 connected (GPIO1 conflict)
 - Power cycling requires 500ms off + 1 second stabilization
 
 ### Battery Monitoring (Optional)

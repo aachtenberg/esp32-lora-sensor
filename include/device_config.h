@@ -31,7 +31,8 @@
 
 // DHT22 Temperature and Humidity Sensor (1-Wire - External)
 // AM2302 is the wired version of DHT22
-#define DHT22_PIN      35   // Data pin (GPIO35 - free on Heltec V3)
+// NOTE: GPIO35 is connected to the white LED on Heltec V3, using GPIO1 (TX) instead
+#define DHT22_PIN      1    // Data pin (GPIO1/TX - available on Heltec V3)
 
 // BME280 Sampling Configuration
 // See Adafruit_BME280.h for mode/sampling values
