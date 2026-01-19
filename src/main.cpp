@@ -106,13 +106,21 @@ void loop() {
     Serial.println("Updating GPS location...");
     GPSData gpsData;
     if (updateGPS(&gpsData)) {
-        Serial.printf("GPS: %.6f, %.6f (alt: %d m, sats: %d, HDOP: %.1f)\n",
+        Serial.printf("GPS: %.6f, %.6f (alt: %.1f m, sats: %d, HDOP: %.1f)\n",
                      gpsData.latitude, gpsData.longitude, 
                      gpsData.altitude_m, gpsData.satellites, gpsData.hdop);
         // TODO: Add GPS data to readings payload for transmission
     } else {
         Serial.println("GPS: No fix yet");
     }
+    
+    // Display GPS status on OLED
+#ifdef OLED_ENABLED
+    displayGPS(gpsData.satellites, gpsData.hasfix, 
+               gpsData.latitude, gpsData.longitude, 
+               gpsData.altitude_m, gpsData.hdop);
+    delay(3000);  // Show GPS info for 3 seconds
+#endif
 #endif
 
     // Display on OLED (if enabled)

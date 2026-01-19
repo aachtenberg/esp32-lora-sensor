@@ -16,6 +16,9 @@ void displayReadings(const ReadingsPayload* readings);
 // Display configuration and status
 void displayConfig(uint32_t sleepSeconds, uint32_t intervalSeconds, uint32_t wakeCount);
 
+// Display GPS information (satellites, fix status, coordinates)
+void displayGPS(uint8_t satellites, bool hasFix, double latitude, double longitude, double altitude, float hdop);
+
 // Set device ID for display
 void setDisplayDeviceId(uint64_t deviceId);
 

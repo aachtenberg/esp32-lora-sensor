@@ -36,8 +36,9 @@
 
 // NEO-6M GPS Module (UART - External, optional)
 // Communicates via UART1 at 9600 baud (standard NMEA output)
-#define GPS_RX_PIN     3    // GPIO3 - UART1 RX (free on Heltec V3)
-#define GPS_TX_PIN     1    // GPIO1 - UART1 TX (free for GPS, DHT22 moved to GPIO2)
+// Heltec V3 recommended pins: GPS TX→GPIO46, GPS RX→GPIO45
+#define GPS_RX_PIN     46   // GPIO46 - ESP32 receives from GPS TX
+#define GPS_TX_PIN     45   // GPIO45 - ESP32 transmits to GPS RX
 #define GPS_BAUD       9600 // Standard NEO-6M baud rate
 
 // BME280 Sampling Configuration

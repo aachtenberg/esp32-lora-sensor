@@ -3,12 +3,6 @@
 #include <HardwareSerial.h>
 #include <TinyGPS++.h>
 
-// GPS module on UART1 (RX on GPIO 3, TX on GPIO 1)
-// Note: GPIO1 is TX shared with DHT22 module in sensor builds
-#define GPS_RX_PIN 3
-#define GPS_TX_PIN 1
-#define GPS_BAUD 9600
-
 // TinyGPS++ library for NMEA parsing
 static TinyGPSPlus gps;
 static HardwareSerial gpsSerial(1);  // UART1
@@ -26,24 +20,50 @@ static GPSData currentGPS = {
 
 /**
  * Initialize GPS module
- * Opens UART1 connection to NEO-6M at 9600 baud
+ * Auto-detects baud rate (some NEO-6M clones use 115200 instead of 9600)
  */
 bool initGPS() {
     Serial.println("[GPS] Initializing NEO-6M GPS module...");
+    Serial.printf("[GPS] RX=GPIO%d, TX=GPIO%d\n", GPS_RX_PIN, GPS_TX_PIN);
+    Serial.flush();
     
-    // Start UART1 for GPS (RX=GPIO3, TX=GPIO1)
-    // Note: GPIO1 conflicts with Serial debug output if DHT22 build
-    gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    // Try only 9600 baud first (most common) with very short timeout
+    uint32_t baud = 9600;
+    Serial.printf("[GPS] Trying %d baud...\n", baud);
+    Serial.flush();
     
-    if (!gpsSerial) {
-        Serial.println("[GPS] ❌ Failed to initialize UART1");
-        return false;
+    gpsSerial.begin(baud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    
+    // Very short test - 500ms only
+    unsigned long start = millis();
+    int bytesReceived = 0;
+    
+    while (millis() - start < 500) {
+        yield();  // Feed watchdog every loop
+        
+        while (gpsSerial.available() > 0) {
+            char c = gpsSerial.read();
+            bytesReceived++;
+            
+            if (gps.encode(c)) {
+                Serial.printf("[GPS] ✅ Found GPS at %d baud! (received %d bytes)\n", baud, bytesReceived);
+                Serial.flush();
+                return true;
+            }
+            
+            yield();  // Feed watchdog after each byte
+        }
+        
+        delay(10);  // Small delay between checks
     }
     
-    Serial.println("[GPS] ✅ UART1 initialized at 9600 baud");
-    Serial.println("[GPS] Waiting for GPS fix (initial acquisition may take 30-60s)...");
+    Serial.printf("[GPS] No data at %d baud (received %d bytes)\n", baud, bytesReceived);
+    Serial.flush();
     
-    return true;
+    // Keep serial open anyway - GPS might start transmitting later
+    Serial.println("[GPS] ⚠️ GPS not detected, but keeping serial open");
+    Serial.flush();
+    return false;  // GPS not found but serial is open
 }
 
 /**
@@ -53,17 +73,26 @@ bool initGPS() {
  */
 bool updateGPS(GPSData* data) {
     bool newFix = false;
+    int bytesRead = 0;
+    int sentencesDecoded = 0;
+    
+    // Check how many bytes are available
+    int available = gpsSerial.available();
     
     // Read available bytes from GPS module
     while (gpsSerial.available() > 0) {
         char c = gpsSerial.read();
+        bytesRead++;
         
         // Feed characters to TinyGPS++ parser
         if (gps.encode(c)) {
-            // Complete sentence received
+            // Complete sentence received and parsed
+            sentencesDecoded++;
             
             // Check for new position fix
             if (gps.location.isUpdated()) {
+                Serial.printf("[GPS] Location updated: valid=%d lat=%.6f lon=%.6f\n",
+                             gps.location.isValid(), gps.location.lat(), gps.location.lng());
                 if (gps.location.isValid()) {
                     data->latitude = gps.location.lat();
                     data->longitude = gps.location.lng();
@@ -83,6 +112,7 @@ bool updateGPS(GPSData* data) {
             // Update satellite count if available
             if (gps.satellites.isUpdated()) {
                 data->satellites = gps.satellites.value();
+                Serial.printf("[GPS] Satellites visible: %d\n", data->satellites);
             }
             
             // Update HDOP (horizontal precision) if available
@@ -91,6 +121,24 @@ bool updateGPS(GPSData* data) {
             }
         }
     }
+    
+    // Log GPS activity (even without fix)
+    if (bytesRead > 0) {
+        Serial.printf("[GPS] Read %d bytes (had %d available), decoded %d sentences. Sats: %d, HDOP: %.1f, HasFix: %d\n",
+                     bytesRead, available, sentencesDecoded, gps.satellites.value(), 
+                     gps.hdop.isValid() ? gps.hdop.hdop() : 999.0, data->hasfix);
+    } else {
+        Serial.println("[GPS] ⚠️  No data available from GPS module - check wiring!");
+    }
+    
+    // Report failed sentences for debugging
+    if (gps.failedChecksum() > 0) {
+        Serial.printf("[GPS] ⚠️  Failed checksums: %d (possible noise/wiring issue)\n", gps.failedChecksum());
+    }
+    
+    // Report characters processed
+    Serial.printf("[GPS] Total chars processed: %d, sentences with fix: %d\n", 
+                 gps.charsProcessed(), gps.sentencesWithFix());
     
     // Update current data
     currentGPS = *data;
@@ -117,7 +165,12 @@ bool hasGPSFix() {
  */
 String formatGPSString() {
     if (!currentGPS.hasfix) {
-        return "No GPS fix (searching...)";
+        char buffer[80];
+        snprintf(buffer, sizeof(buffer),
+                 "No GPS fix (Sats:%d HDOP:%.1f)",
+                 currentGPS.satellites,
+                 currentGPS.hdop);
+        return String(buffer);
     }
     
     char buffer[128];
