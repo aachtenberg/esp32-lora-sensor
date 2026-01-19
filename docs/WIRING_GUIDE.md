@@ -87,14 +87,15 @@ DHT22/AM2302 → ESP32 LoRa V3
 ─────────────────────────────
 VCC (3.3V)  → 3V
 GND         → GND
-DATA        → GPIO1 (TX pin)
+DATA        → GPIO2
 ```
 
 **Pin assignment in code:**
-- DHT22_PIN: GPIO 1 (TX pin)
+- DHT22_PIN: GPIO 2
 
 **⚠️ Important Notes:**
-- GPIO1 is the TX (UART transmit) pin, so **serial output will not work** while DHT22 is connected
+- GPIO2 is a general-purpose GPIO, suitable for 1-Wire communication
+- GPIO1 is reserved for GPS TX pin (UART1 transmit)
 - GPIO35 was originally planned but it's connected to the white LED on Heltec V3
 - GPIO37 is not reliably accessible on this board revision
 - DHT22 sensors have a built-in pull-up resistor, so no external resistor is needed
@@ -103,7 +104,7 @@ DATA        → GPIO1 (TX pin)
 **Important timing notes:**
 - DHT22 requires 2 seconds initial stabilization after power-on
 - Minimum 2-second interval between readings
-- Serial debugging not available with DHT22 connected (GPIO1 conflict)
+- Serial debugging works normally (GPIO2 doesn't conflict with serial)
 - Power cycling requires 500ms off + 1 second stabilization
 
 ### Battery Monitoring (Optional)
@@ -187,14 +188,13 @@ If you experience "sensor not found" errors, try changing the address in `device
 ### DHT22 not detected
 
 1. **Check wiring:**
-   - Verify data pin is connected to GPIO 1 (TX)
+   - Verify data pin is connected to GPIO 2
    - Check power connections (3.3V and GND)
    - Note: Most DHT22 modules have built-in pull-up resistor
 
-2. **Serial debugging consideration:**
-   - GPIO1 is TX pin, so Serial.print() works normally
-   - Brief interference during sensor reads (~5ms every 30s)
-   - Consider using alternative GPIO if continuous serial debugging needed
+2. **Serial debugging:**
+   - GPIO2 doesn't conflict with serial, so debugging works normally
+   - This is why GPIO2 is preferred over GPIO1 (which is TX pin)
 
 3. **Timing requirements:**
    - DHT22 needs 2 seconds to stabilize after power-on
@@ -259,16 +259,17 @@ If OLED doesn't work:
 | 17   | OLED SDA | Used (built-in) |
 | 18   | OLED SCL | Used (built-in) |
 | 21   | OLED RST | Used (built-in) |
-| 1    | DHT22 Data (TX) | **Used (external, DHT22 build)** |
+| 1    | GPS TX (UART1)| **Used (external, GPS build)** |
+| 3    | GPS RX (UART1)| **Used (external, GPS build)** |
+| 2    | DHT22 Data | **Used (external, DHT22 build)** |
 | 4    | DS18B20 Data | **Used (external, DS18B20 build)** |
-| 1    | DHT22 Data (TX) | **Used (external, DHT22 build)** |
 | 26   | BME280 SCL| **Used (external, BME280 build)** |
 | 33   | BME280 SDA| **Used (external, BME280 build)** |
-| 36   | Vext Ctrl / Battery ADC | **Used (see note)** |
+| 36   | Battery ADC | **Used (optional)** |
 
-**Note:** GPIO 36 serves dual purpose - Vext power control and battery ADC input. The Heltec V3 uses this pin for peripheral power control.
+**Note:** GPIO usage depends on which sensor build is active (BME280, DHT22, DS18B20, or GPS). Multiple sensors can coexist if GPIO pins don't conflict (e.g., GPS + DHT22 on pins 1,3,2 respectively).
 
-**Available GPIOs for expansion:** 0, 2, 32, 39 (and GPIO 1/4/26/33 if not using that sensor build)
+**Available GPIOs for expansion:** 0, 32, 39 (and GPIO 1/2/3/4/26/33 if not using that sensor build)
 
 ## References
 
