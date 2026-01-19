@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include "lora_protocol.h"
 
-// Initialize sensor (BME280 or DS18B20 based on compile-time flag)
+// Initialize sensor (BME280, DHT22, or DS18B20 based on compile-time flag)
 bool initSensor();
 
 // Read sensor data and populate readings payload

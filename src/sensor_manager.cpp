@@ -1,7 +1,7 @@
 /**
  * Sensor Manager - Multi-sensor support
- * Supports BME280 environmental sensor or DS18B20 temperature sensor
- * Selected via compile-time flag: SENSOR_TYPE_BME280 or SENSOR_TYPE_DS18B20
+ * Supports BME280 environmental sensor, DHT22 temperature/humidity sensor, or DS18B20 temperature sensor
+ * Selected via compile-time flag: SENSOR_TYPE_BME280, SENSOR_TYPE_DHT22, or SENSOR_TYPE_DS18B20
  */
 
 #include "sensor_manager.h"

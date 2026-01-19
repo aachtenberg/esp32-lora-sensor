@@ -12,11 +12,11 @@ Battery-powered environmental sensor using LoRa communication. Supports **BME280
 
 ## Supported Sensors
 
-| Sensor | Build Environment | Readings |
-|--------|-------------------|----------|
-| **BME280** | `esp32-lora-sensor` (default) | Temperature, humidity, pressure, altitude |
-| **DHT22/AM2302** | `esp32-lora-sensor-dht22` | Temperature, humidity |
-| **DS18B20** | `esp32-lora-sensor-ds18b20` | Temperature only |
+| Sensor | Build Environment | Readings | Notes |
+|--------|-------------------|----------|-------|
+| **BME280** | `esp32-lora-sensor` (default) | Temperature, humidity, pressure, altitude | - |
+| **DHT22/AM2302** | `esp32-lora-sensor-dht22` | Temperature, humidity | Uses GPIO1 (TX), minimal impact on serial debugging |
+| **DS18B20** | `esp32-lora-sensor-ds18b20` | Temperature only | - |
 
 ## Features
 
@@ -58,6 +58,9 @@ BME280 Sensor (I2C - external, separate bus):
 DS18B20 Sensor (1-Wire - external):
   Data = GPIO 4 (with 4.7K pull-up to 3.3V)
 
+DHT22 Sensor (1-Wire - external):
+  Data = GPIO 1 (TX pin, serial works normally except during brief sensor reads)
+
 Vext Control: GPIO 36 (LOW = peripherals ON)
 Battery ADC: GPIO 36 (shared with Vext)
 ```
@@ -87,6 +90,12 @@ cd ~/repos/esp32-lora-sensor
 pio run -e esp32-lora-sensor-ds18b20
 ```
 
+**DHT22 Sensor:**
+```bash
+cd ~/repos/esp32-lora-sensor
+pio run -e esp32-lora-sensor-dht22
+```
+
 ### 3. Upload Filesystem (First Time Only)
 
 ```bash
@@ -105,6 +114,11 @@ pio run -e esp32-lora-sensor -t upload
 **DS18B20 Sensor:**
 ```bash
 pio run -e esp32-lora-sensor-ds18b20 -t upload
+```
+
+**DHT22 Sensor:**
+```bash
+pio run -e esp32-lora-sensor-dht22 -t upload
 ```
 
 ### 5. Monitor Serial Output
@@ -225,9 +239,13 @@ pio run -e esp32-lora-sensor
 # Build DS18B20 firmware
 pio run -e esp32-lora-sensor-ds18b20
 
+# Build DHT22 firmware
+pio run -e esp32-lora-sensor-dht22
+
 # Upload firmware (specify environment)
 pio run -e esp32-lora-sensor -t upload
 pio run -e esp32-lora-sensor-ds18b20 -t upload
+pio run -e esp32-lora-sensor-dht22 -t upload
 
 # Upload filesystem
 pio run -t uploadfs
@@ -248,6 +266,14 @@ pio run -t clean
 - Check DS18B20 wiring: Data pin to GPIO 4 with 4.7K pull-up resistor to 3.3V
 - Ensure Vext is enabled (GPIO 36 LOW)
 - The firmware includes automatic 1-Wire bus recovery on read failures
+
+### DHT22 not reading
+- Check DHT22 wiring: Data pin to GPIO 1 (TX), VCC to 3.3V, GND to GND
+- DHT22 has built-in pull-up resistor, no external resistor needed
+- Ensure 2-second stabilization time after power-on is met
+- The firmware includes automatic power cycling recovery on read failures
+- Verify sensor is DHT22 (AM2302), not DHT11 - they use different protocols
+- Note: GPIO1 is TX pin - serial output works normally except during brief sensor reads (~5ms every 30s)
 
 ### LoRa not transmitting
 - Verify antenna is connected (built-in on Heltec V3)

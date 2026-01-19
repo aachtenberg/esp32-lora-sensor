@@ -2,7 +2,7 @@
 
 ## Hardware
 - **Heltec WiFi LoRa 32 V3** (ESP32-S3, SX1262, 0.96" OLED)
-- **Sensor**: BME280 (I2C) or DS18B20 (1-Wire) - compile-time selection
+- **Sensor**: BME280 (I2C), DHT22 (1-Wire), or DS18B20 (1-Wire) - compile-time selection
 - **3.7V LiPo Battery** (with voltage divider for monitoring)
 
 ## Pin Configuration Summary
@@ -184,6 +184,26 @@ If you experience "sensor not found" errors, try changing the address in `device
    - Counterfeit DS18B20 sensors are common
    - May not work reliably or give incorrect readings
 
+### DHT22 not detected
+
+1. **Check wiring:**
+   - Verify data pin is connected to GPIO 1 (TX)
+   - Check power connections (3.3V and GND)
+   - Note: Most DHT22 modules have built-in pull-up resistor
+
+2. **Serial debugging consideration:**
+   - GPIO1 is TX pin, so Serial.print() works normally
+   - Brief interference during sensor reads (~5ms every 30s)
+   - Consider using alternative GPIO if continuous serial debugging needed
+
+3. **Timing requirements:**
+   - DHT22 needs 2 seconds to stabilize after power-on
+   - Minimum 2-second interval between readings
+
+4. **Verify sensor type:**
+   - Ensure it's DHT22 (AM2302), not DHT11
+   - DHT11 and DHT22 use different protocols
+
 ### BME280 not detected
 
 1. **Check I2C address:**
@@ -239,14 +259,16 @@ If OLED doesn't work:
 | 17   | OLED SDA | Used (built-in) |
 | 18   | OLED SCL | Used (built-in) |
 | 21   | OLED RST | Used (built-in) |
+| 1    | DHT22 Data (TX) | **Used (external, DHT22 build)** |
 | 4    | DS18B20 Data | **Used (external, DS18B20 build)** |
+| 1    | DHT22 Data (TX) | **Used (external, DHT22 build)** |
 | 26   | BME280 SCL| **Used (external, BME280 build)** |
 | 33   | BME280 SDA| **Used (external, BME280 build)** |
 | 36   | Vext Ctrl / Battery ADC | **Used (see note)** |
 
 **Note:** GPIO 36 serves dual purpose - Vext power control and battery ADC input. The Heltec V3 uses this pin for peripheral power control.
 
-**Available GPIOs for expansion:** 0, 2, 32, 39 (and GPIO 4/26/33 if not using that sensor)
+**Available GPIOs for expansion:** 0, 2, 32, 39 (and GPIO 1/4/26/33 if not using that sensor build)
 
 ## References
 
@@ -255,3 +277,5 @@ If OLED doesn't work:
 - [Adafruit BME280 Guide](https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout)
 - [DS18B20 Datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/DS18B20.pdf)
 - [Dallas Temperature Library](https://github.com/milesburton/Arduino-Temperature-Control-Library)
+- [DHT22 Datasheet](https://www.sparkfun.com/datasheets/Sensors/Temperature/DHT22.pdf)
+- [Adafruit DHT Library](https://github.com/adafruit/DHT-sensor-library)
