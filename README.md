@@ -2,6 +2,8 @@
 
 Battery-powered environmental sensor using LoRa communication. Supports **BME280** (temperature, humidity, pressure), **DHT22** (temperature, humidity), or **DS18B20** (temperature only) sensors.
 
+**→ [Quick Start Guide](docs/QUICKSTART.md) - Get running in 10 minutes**
+
 ## Hardware
 
 - **Board**: Heltec WiFi LoRa 32 V3 (ESP32-S3) with built-in SX1262
@@ -21,9 +23,9 @@ Battery-powered environmental sensor using LoRa communication. Supports **BME280
 ## Features
 
 - **Multi-sensor support**: BME280 environmental, DHT22 temp/humidity, or DS18B20 temperature sensor
+- **GPS support**: Optional NEO-6M GPS module for location tracking (compile-time flag)
 - LoRa peer-to-peer communication with gateway
 - **Device name propagation**: Auto-sends name to gateway in status messages
-- **Location field**: Prepared for future GPS integration
 - Low-power operation with configurable sleep intervals
 - **Configurable sensor interval**: Reading frequency (5-3600s) via LoRa command
 - **I2C error recovery**: Automatic detection and recovery from BME280 communication failures
@@ -59,7 +61,11 @@ DS18B20 Sensor (1-Wire - external):
   Data = GPIO 4 (with 4.7K pull-up to 3.3V)
 
 DHT22 Sensor (1-Wire - external):
-  Data = GPIO 1 (TX pin, serial works normally except during brief sensor reads)
+  Data = GPIO 2
+
+GPS Module (UART1 - optional, requires GPS_ENABLED flag):
+  RX = GPIO 3 (connects to GPS TX)
+  TX = GPIO 1 (connects to GPS RX)
 
 Vext Control: GPIO 36 (LOW = peripherals ON)
 Battery ADC: GPIO 36 (shared with Vext)
@@ -182,7 +188,7 @@ Uses binary packet protocol defined in [lib/LoRaProtocol/lora_protocol.h](lib/Lo
 - Payload: Up to 240 bytes (sensor readings, status, events)
 
 **Message types**:
-- `MSG_READINGS` (0x01) - BME280 sensor data (22 bytes)
+- `MSG_READINGS` (0x01) - Sensor data + GPS (35 bytes: sensor readings + GPS fields)
 - `MSG_STATUS` (0x02) - Device health/diagnostics (88 bytes with name + location)
 - `MSG_EVENT` (0x03) - System events (startup, errors, config changes)
 - `MSG_COMMAND` (0x10) - Incoming commands from gateway
@@ -195,9 +201,15 @@ Uses binary packet protocol defined in [lib/LoRaProtocol/lora_protocol.h](lib/Lo
 4. Processes any received commands
 5. Waits for configured interval before next reading
 
+**GPS Support** (optional):
+- Enabled with `-D GPS_ENABLED` build flag
+- Uses NEO-6M GPS module on UART1 (GPIO1/GPIO3)
+- GPS fields included in all readings packets (zeroed when GPS disabled or no fix)
+- Fields: latitude, longitude, altitude, satellite count, HDOP
+
 **Status messages** (every 5 wake cycles):
 - Device name from `/data/device_name.txt`
-- Location field (empty, reserved for GPS)
+- Location field (from GPS when available)
 - Uptime, wake count, battery, heap
 - Sensor and TX failure counts
 - Current deep sleep interval
@@ -233,57 +245,50 @@ esp32-lora-sensor/
 ### Building
 
 ```bash
-# Build BME280 firmware (default)
-pio run -e esp32-lora-sensor
+# Build firmware
+pio run -e esp32-lora-sensor              # BME280 (default)
+pio run -e esp32-lora-sensor-ds18b20      # DS18B20
+pio run -e esp32-lora-sensor-dht22        # DHT22
 
-# Build DS18B20 firmware
-pio run -e esp32-lora-sensor-ds18b20
+# Upload
+pio run -e <environment> -t upload        # Upload firmware
+pio run -t uploadfs                        # Upload filesystem (first time)
 
-# Build DHT22 firmware
-pio run -e esp32-lora-sensor-dht22
-
-# Upload firmware (specify environment)
-pio run -e esp32-lora-sensor -t upload
-pio run -e esp32-lora-sensor-ds18b20 -t upload
-pio run -e esp32-lora-sensor-dht22 -t upload
-
-# Upload filesystem
+# Monitor
+pio device monitor                         # Serial output at 115200 baud
+```
 pio run -t uploadfs
 
 # Clean build
 pio run -t clean
 ```
 
-## Troubleshooting
+## Documentation
 
-### BME280 not reading
-- Check BME280 I2C wiring (SDA=33, SCL=26 on Heltec V3)
-- Verify BME280 address (0x76 if SDO low, 0x77 if SDO high)
-- Ensure Vext is enabled (GPIO 36 LOW)
-- The firmware includes automatic I2C error recovery - if readings fail, it will power cycle the sensor and reinitialize
+- **[Wiring Guide](docs/WIRING_GUIDE.md)** - Complete hardware wiring for BME280, DHT22, DS18B20, and GPS
+- **[Testing Guide](docs/TESTING.md)** - Test programs for debugging hardware
+- **[GPS Testing](docs/TEST_GPS.md)** - GPS module diagnostic and troubleshooting
+- **[BME280 Testing](docs/TEST_BME280.md)** - BME280 I2C wiring verification
+- **[Config Manager Testing](docs/TEST_CONFIG_MANAGER.md)** - Configuration persistence testing
 
-### DS18B20 not reading
-- Check DS18B20 wiring: Data pin to GPIO 4 with 4.7K pull-up resistor to 3.3V
-- Ensure Vext is enabled (GPIO 36 LOW)
-- The firmware includes automatic 1-Wire bus recovery on read failures
+## Quick Troubleshooting
 
-### DHT22 not reading
-- Check DHT22 wiring: Data pin to GPIO 1 (TX), VCC to 3.3V, GND to GND
-- DHT22 has built-in pull-up resistor, no external resistor needed
-- Ensure 2-second stabilization time after power-on is met
-- The firmware includes automatic power cycling recovery on read failures
-- Verify sensor is DHT22 (AM2302), not DHT11 - they use different protocols
-- Note: GPIO1 is TX pin - serial output works normally except during brief sensor reads (~5ms every 30s)
+### Sensor Issues
+- **BME280:** Check I2C wiring (GPIO33/26), verify address (0x76 or 0x77)
+- **DS18B20:** Verify 4.7K pull-up resistor on GPIO4
+- **DHT22:** Check GPIO2 connection, ensure 2s stabilization time
+- **GPS:** Run `test_gps_pins.cpp` diagnostic, verify clear sky view
 
-### LoRa not transmitting
-- Verify antenna is connected (built-in on Heltec V3)
-- Check frequency matches your region (915 MHz US, 868 MHz EU)
-- Ensure Vext is enabled for LoRa power
+### LoRa Issues
+- Verify antenna connected (built-in on Heltec V3)
+- Check frequency matches region (915 MHz US, 868 MHz EU)
+- Ensure Vext enabled (GPIO36 LOW)
 
-### Display not working
-- Built-in OLED uses SDA=17, SCL=18, RST=21
-- Check I2C address (0x3C expected)
-- Ensure Vext is enabled
+### Display Issues
+- Built-in OLED at I2C address 0x3C
+- Uses GPIO17 (SDA), GPIO18 (SCL), GPIO21 (RST)
+
+**See [docs/TESTING.md](docs/TESTING.md) for detailed troubleshooting.**
 
 ## Related Projects
 

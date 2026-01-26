@@ -113,6 +113,13 @@ bool readSensorData(ReadingsPayload* readings) {
     readings->batteryVoltage = 0;
     readings->batteryPercent = 0;
 
+    // Initialize GPS fields (DS18B20 has no GPS support)
+    readings->gpsLatitude = 0;
+    readings->gpsLongitude = 0;
+    readings->gpsAltitude = 0;
+    readings->gpsSatellites = 0;
+    readings->gpsHdop = 0;
+
     // Debug output
     Serial.println("[SENSOR] DS18B20 Reading:");
     Serial.printf("  Temperature: %.2f°C\n", tempC);
@@ -228,6 +235,13 @@ bool readSensorData(ReadingsPayload* readings) {
     // Battery will be filled by power_manager
     readings->batteryVoltage = 0;
     readings->batteryPercent = 0;
+
+    // Initialize GPS fields (DHT22 has no GPS support)
+    readings->gpsLatitude = 0;
+    readings->gpsLongitude = 0;
+    readings->gpsAltitude = 0;
+    readings->gpsSatellites = 0;
+    readings->gpsHdop = 0;
 
     // Debug output
     Serial.println("[SENSOR] DHT22 Reading:");
@@ -463,6 +477,13 @@ bool readSensorData(ReadingsPayload* readings) {
     // Battery will be filled by power_manager
     readings->batteryVoltage = 0;
     readings->batteryPercent = 0;
+
+    // Initialize GPS fields (BME280 has no GPS support, GPS data set in main.cpp if enabled)
+    readings->gpsLatitude = 0;
+    readings->gpsLongitude = 0;
+    readings->gpsAltitude = 0;
+    readings->gpsSatellites = 0;
+    readings->gpsHdop = 0;
 
     // Debug output
     Serial.println("[SENSOR] Reading:");

@@ -31,8 +31,15 @@
 
 // DHT22 Temperature and Humidity Sensor (1-Wire - External)
 // AM2302 is the wired version of DHT22
-// NOTE: GPIO35 is connected to the white LED on Heltec V3, using GPIO1 (TX) instead
-#define DHT22_PIN      1    // Data pin (GPIO1/TX - available on Heltec V3)
+// NOTE: GPIO35 is connected to the white LED on Heltec V3
+#define DHT22_PIN      2    // Data pin (GPIO2 - free on Heltec V3)
+
+// NEO-6M GPS Module (UART - External, optional)
+// Communicates via UART1 at 9600 baud (standard NMEA output)
+// Heltec V3 recommended pins: GPS TX→GPIO46, GPS RX→GPIO45
+#define GPS_RX_PIN     46   // GPIO46 - ESP32 receives from GPS TX
+#define GPS_TX_PIN     45   // GPIO45 - ESP32 transmits to GPS RX
+#define GPS_BAUD       9600 // Standard NEO-6M baud rate
 
 // BME280 Sampling Configuration
 // See Adafruit_BME280.h for mode/sampling values

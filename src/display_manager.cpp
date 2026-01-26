@@ -219,6 +219,58 @@ void updateTxStats(uint32_t count, int16_t rssi) {
 }
 
 /**
+ * Display GPS information
+ */
+void displayGPS(uint8_t satellites, bool hasFix, double latitude, double longitude, double altitude, float hdop) {
+    if (display == nullptr) return;
+    
+    display->clearBuffer();
+    char buffer[32];
+    
+    // Title
+    display->setFont(u8g2_font_5x7_tf);
+    display->drawStr(0, 7, "GPS Status");
+    
+    // Device ID
+    snprintf(buffer, sizeof(buffer), "ID:%04llX", (unsigned long long)(g_deviceId & 0xFFFF));
+    display->drawStr(80, 7, buffer);
+    
+    // Satellite count and fix status
+    display->setFont(u8g2_font_ncenB08_tr);
+    if (hasFix) {
+        snprintf(buffer, sizeof(buffer), "SAT:%u FIX:YES", satellites);
+    } else {
+        snprintf(buffer, sizeof(buffer), "SAT:%u FIX:NO", satellites);
+    }
+    display->drawStr(0, 19, buffer);
+    
+    // HDOP (Horizontal Dilution of Precision)
+    display->setFont(u8g2_font_6x10_tr);
+    snprintf(buffer, sizeof(buffer), "HDOP:%.1f", hdop);
+    display->drawStr(0, 31, buffer);
+    
+    if (hasFix) {
+        // Latitude
+        snprintf(buffer, sizeof(buffer), "Lat:%.6f", latitude);
+        display->drawStr(0, 43, buffer);
+        
+        // Longitude
+        snprintf(buffer, sizeof(buffer), "Lon:%.6f", longitude);
+        display->drawStr(0, 55, buffer);
+        
+        // Altitude
+        snprintf(buffer, sizeof(buffer), "Alt:%.1fm", altitude);
+        display->drawStr(0, 64, buffer);
+    } else {
+        // Show waiting message
+        display->drawStr(0, 43, "Waiting for fix...");
+        display->drawStr(0, 55, "(needs clear sky)");
+    }
+    
+    display->sendBuffer();
+}
+
+/**
  * Clear display
  */
 void clearDisplay() {
@@ -235,6 +287,7 @@ void displayStartup(const char* version) {}
 void displayReadings(const ReadingsPayload* readings) {}
 void displayStatus(const char* message) {}
 void displayError(const char* error) {}
+void displayGPS(uint8_t satellites, bool hasFix, double latitude, double longitude, double altitude, float hdop) {}
 void updateTxStats(uint32_t count, int16_t rssi) {}
 void clearDisplay() {}
 
