@@ -93,7 +93,7 @@ void loop() {
     }
 
     // Read sensor data
-    Serial.println("Reading BME280 sensor...");
+    Serial.println("Reading sensor data...");
     ReadingsPayload readings;
     if (!readSensorData(&readings)) {
         Serial.println("ERROR: Failed to read sensor data");
@@ -105,13 +105,26 @@ void loop() {
     // Update GPS and collect location data (if available)
     Serial.println("Updating GPS location...");
     GPSData gpsData;
-    if (updateGPS(&gpsData)) {
+    updateGPS(&gpsData);
+    
+    // Add GPS data to readings (even if no fix - shows 0,0 when invalid)
+    if (gpsData.hasfix) {
         Serial.printf("GPS: %.6f, %.6f (alt: %.1f m, sats: %d, HDOP: %.1f)\n",
                      gpsData.latitude, gpsData.longitude, 
                      gpsData.altitude_m, gpsData.satellites, gpsData.hdop);
-        // TODO: Add GPS data to readings payload for transmission
+        readings.gpsLatitude = (int32_t)(gpsData.latitude * 1000000.0);
+        readings.gpsLongitude = (int32_t)(gpsData.longitude * 1000000.0);
+        readings.gpsAltitude = (int16_t)gpsData.altitude_m;
+        readings.gpsSatellites = gpsData.satellites;
+        readings.gpsHdop = (uint16_t)(gpsData.hdop * 10.0);
     } else {
         Serial.println("GPS: No fix yet");
+        // Set GPS fields to 0 when no fix
+        readings.gpsLatitude = 0;
+        readings.gpsLongitude = 0;
+        readings.gpsAltitude = 0;
+        readings.gpsSatellites = gpsData.satellites;  // Still show satellite count
+        readings.gpsHdop = (uint16_t)(gpsData.hdop * 10.0);
     }
     
     // Display GPS status on OLED
@@ -121,6 +134,13 @@ void loop() {
                gpsData.altitude_m, gpsData.hdop);
     delay(3000);  // Show GPS info for 3 seconds
 #endif
+#else
+    // No GPS support - set GPS fields to 0
+    readings.gpsLatitude = 0;
+    readings.gpsLongitude = 0;
+    readings.gpsAltitude = 0;
+    readings.gpsSatellites = 0;
+    readings.gpsHdop = 0;
 #endif
 
     // Display on OLED (if enabled)

@@ -95,9 +95,6 @@ DATA        → GPIO2
 
 **⚠️ Important Notes:**
 - GPIO2 is a general-purpose GPIO, suitable for 1-Wire communication
-- GPIO1 is reserved for GPS TX pin (UART1 transmit)
-- GPIO35 was originally planned but it's connected to the white LED on Heltec V3
-- GPIO37 is not reliably accessible on this board revision
 - DHT22 sensors have a built-in pull-up resistor, so no external resistor is needed
 - If using a bare DHT22 chip (not a breakout module), add a 10K pull-up resistor between DATA and VCC
 
@@ -106,6 +103,35 @@ DATA        → GPIO2
 - Minimum 2-second interval between readings
 - Serial debugging works normally (GPIO2 doesn't conflict with serial)
 - Power cycling requires 500ms off + 1 second stabilization
+
+### GPS Module (Optional - Requires GPS_ENABLED flag)
+
+**Connect NEO-6M GPS module:**
+
+```
+NEO-6M GPS → ESP32 LoRa V3
+──────────────────────────
+VCC (3.3V) → 3V
+GND        → GND
+TX         → GPIO3 (ESP32 RX)
+RX         → GPIO1 (ESP32 TX)
+```
+
+**Pin assignments in code:**
+- GPS_RX_PIN: GPIO 3 (ESP32 receives from GPS TX)
+- GPS_TX_PIN: GPIO 1 (ESP32 transmits to GPS RX)
+
+**⚠️ Important Notes:**
+- GPS must be enabled with `-D GPS_ENABLED` build flag
+- Uses UART1 for communication at 9600 baud
+- GPS needs clear view of sky to acquire satellite fix
+- Initial fix can take 30 seconds to several minutes
+- When GPS is disabled, GPS fields in readings are set to zero
+
+**Testing GPS:**
+- Use `test_gps_pins.cpp` to diagnose wiring issues
+- LED on GPS module should flash when receiving satellite data
+- Serial output shows satellite count and HDOP values
 
 ### Battery Monitoring (Optional)
 
