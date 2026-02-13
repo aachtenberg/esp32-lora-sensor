@@ -34,4 +34,7 @@ void updateTxStats(uint32_t count, int16_t rssi);
 // Clear display
 void clearDisplay();
 
+// Turn off display (power save)
+void displayOff();
+
 #endif // DISPLAY_MANAGER_H

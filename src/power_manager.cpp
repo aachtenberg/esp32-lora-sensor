@@ -9,8 +9,15 @@ void initPowerManager() {
     // Configure ADC resolution
     analogReadResolution(12); // 12-bit resolution (0-4095)
     
-    // Configure battery pin
+    // Heltec V3: Enable battery ADC control pin
+    #ifdef BATTERY_ADC_CTRL
+    pinMode(BATTERY_ADC_CTRL, OUTPUT);
+    digitalWrite(BATTERY_ADC_CTRL, HIGH);  // Enable ADC reading
+    #endif
+    
+    // Configure battery pin with attenuation for full range
     pinMode(BATTERY_PIN, INPUT);
+    analogSetPinAttenuation(BATTERY_PIN, ADC_11db);  // 0-3.3V range
     
     Serial.printf("[POWER] Initialized battery monitoring on GPIO%d\n", BATTERY_PIN);
 }
@@ -62,10 +69,52 @@ void readBatteryStatus(uint16_t* voltage_mv, uint8_t* percentage) {
 }
 
 /**
+ * Read battery voltage (volts)
+ */
+float readBatteryVoltage() {
+    // Ensure ADC control is enabled (Heltec V3)
+    #ifdef BATTERY_ADC_CTRL
+    digitalWrite(BATTERY_ADC_CTRL, HIGH);
+    delay(10);  // Allow settling time
+    #endif
+    
+    // Take multiple samples to reduce noise
+    uint32_t adcSum = 0;
+    for (int i = 0; i < BATTERY_ADC_SAMPLES; i++) {
+        adcSum += analogRead(BATTERY_PIN);
+        delay(2);
+    }
+    float adcAver = adcSum / (float)BATTERY_ADC_SAMPLES;
+
+    // Formula: ADC * (Vref / Resolution) * Multiplier * Calibration
+    float voltage = adcAver * (BATTERY_ADC_REFERENCE / BATTERY_ADC_RESOLUTION) * 
+                    BATTERY_VOLTAGE_MULTIPLIER * BATTERY_CALIBRATION;
+
+    Serial.printf("[POWER] ADC raw: %.0f, Voltage: %.2fV\n", adcAver, voltage);
+    
+    return voltage;
+}
+
+/**
+ * Calculate battery percentage from voltage
+ */
+uint8_t calculateBatteryPercent(float voltage) {
+    if (voltage >= BATTERY_MAX_VOLTAGE) {
+        return 100;
+    } else if (voltage <= BATTERY_MIN_VOLTAGE) {
+        return 0;
+    } else {
+        return (uint8_t)((voltage - BATTERY_MIN_VOLTAGE) / 
+                        (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE) * 100.0);
+    }
+}
+
+/**
  * Configure deep sleep
  */
-void enterDeepSleep(uint64_t seconds) {
-    Serial.printf("[POWER] Entering deep sleep for %llu seconds...\n", seconds);
+void enterDeepSleep(uint32_t seconds) {
+    Serial.printf("[POWER] Entering deep sleep for %lu seconds...\n", seconds);
+    Serial.flush();  // Ensure message is sent before sleep
     
     // Turn off peripherals
     #ifdef OLED_ENABLED
@@ -75,6 +124,8 @@ void enterDeepSleep(uint64_t seconds) {
     // Turn off Vext to cut power to sensors and LoRa
     pinMode(VEXT_CTRL, OUTPUT);
     digitalWrite(VEXT_CTRL, HIGH); // HIGH = OFF
+    
+    delay(100);  // Allow power to settle
     
     // Configure wake timer
     esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);

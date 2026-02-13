@@ -27,7 +27,7 @@
 
 // DS18B20 Temperature Sensor (1-Wire - External)
 // Requires 4.7K pull-up resistor between data pin and 3.3V
-#define DS18B20_PIN    4    // 1-Wire data pin (GPIO4 - free on Heltec V3)
+#define DS18B20_PIN    2    // 1-Wire data pin (GPIO2 - free on Heltec V3)
 
 // DHT22 Temperature and Humidity Sensor (1-Wire - External)
 // AM2302 is the wired version of DHT22
@@ -57,15 +57,15 @@
 #define OLED_ADDR      0x3C // Standard I2C address for SSD1306
 
 // Battery Monitoring
-// Note: GPIO35 may be used by LoRa BUSY, using GPIO36 instead
-#define BATTERY_PIN    36   // ADC1_CH0 (VP - input only, no pull-up)
+// Heltec V3 has built-in battery monitoring circuit via JST connector
+#define BATTERY_PIN         1    // ADC pin for battery voltage
+#define BATTERY_ADC_CTRL   37   // Enable ADC reading (pull HIGH)
 #define BATTERY_ADC_SAMPLES 10  // Number of samples to average
 
 // Battery voltage divider calibration
-// If using voltage divider R1=10K, R2=10K (2:1 ratio)
-// Voltage divider: Battery+ -> 10K -> ADC_PIN -> 10K -> GND
-#define BATTERY_VOLTAGE_MULTIPLIER 2.0
-#define BATTERY_CALIBRATION 1.134     // Calibration factor (from current project)
+// Heltec V3 has internal voltage divider (approx 4.9:1 ratio based on 100K/390K)
+#define BATTERY_VOLTAGE_MULTIPLIER 4.9
+#define BATTERY_CALIBRATION 1.0       // Adjust if readings are off
 #define BATTERY_ADC_REFERENCE 3.3     // ESP32 ADC reference voltage
 #define BATTERY_ADC_RESOLUTION 4095.0 // 12-bit ADC
 

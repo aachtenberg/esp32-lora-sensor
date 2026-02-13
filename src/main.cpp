@@ -6,6 +6,7 @@
 #include "sensor_manager.h"
 #include "lora_comm.h"
 #include "config_manager.h"
+#include "power_manager.h"
 
 #ifdef OLED_ENABLED
 #include "display_manager.h"
@@ -15,9 +16,9 @@
 #include "gps_manager.h"
 #endif
 
-// Global state
-uint16_t g_sequenceNumber = 0;
-uint32_t g_wakeCount = 0;
+// Global state (RTC memory survives deep sleep)
+RTC_DATA_ATTR uint16_t g_sequenceNumber = 0;
+RTC_DATA_ATTR uint32_t g_wakeCount = 0;
 uint64_t g_deviceId = 0;
 
 void setup() {
@@ -60,6 +61,9 @@ void setup() {
         // TODO: Store error and retry on next wake
     }
 
+    // Initialize power manager (battery monitoring)
+    initPowerManager();
+
 #ifdef GPS_ENABLED
     // Initialize GPS module
     Serial.println("Initializing GPS module...");
@@ -100,6 +104,12 @@ void loop() {
         // TODO: Increment error counter
         // For now, continue with invalid data marked
     }
+
+    // Read battery status
+    float batteryV = readBatteryVoltage();
+    readings.batteryVoltage = (uint16_t)(batteryV * 1000);
+    readings.batteryPercent = calculateBatteryPercent(batteryV);
+    Serial.printf("Battery: %dmV (%d%%)\n", readings.batteryVoltage, readings.batteryPercent);
 
 #ifdef GPS_ENABLED
     // Update GPS and collect location data (if available)
@@ -171,7 +181,6 @@ void loop() {
 #ifdef OLED_ENABLED
         updateTxStats(g_sequenceNumber, getLastRSSI());
         displayReadings(&readings);
-        delay(2000);  // Show results before sleep
 #endif
 
         // Wait for ACK from gateway (unless battery critical)
@@ -217,10 +226,11 @@ void loop() {
         ESP.restart();
     }
 
-    // Display configuration screen
+    // Display configuration screen briefly
 #ifdef OLED_ENABLED
     displayConfig(getDeepSleepSeconds(), getSensorIntervalSeconds(), g_wakeCount);
-    delay(3000);  // Show config for 3 seconds
+    delay(5000);  // Show config for 5 seconds
+    displayReadings(&readings);  // Switch back to readings
 #endif
 
     // Print status
@@ -228,15 +238,26 @@ void loop() {
     Serial.printf("[%lu] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
     Serial.printf("[%lu] RSSI: %d dBm\n", millis(), getLastRSSI());
     
-    // Get configured sensor interval
-    uint16_t intervalSeconds = getSensorIntervalSeconds();
-    Serial.printf("Next transmission in: %d seconds\n", intervalSeconds);
-
-    // Wait before next transmission using configured interval
-    delay(intervalSeconds * 1000);
+    // Get configured deep sleep interval
+    uint32_t sleepSeconds = getDeepSleepSeconds();
     
-    // Increment wake count for next cycle
-    g_wakeCount++;
+    // DEBUG: Skip deep sleep if seconds is 0 or very short (loop mode)
+    if (sleepSeconds == 0) {
+        Serial.println("[POWER] Deep sleep disabled (0s) - using loop mode");
+        delay(30000);  // Wait 30 seconds then loop
+        g_wakeCount++;
+        return;  // Loop back
+    }
+    
+    Serial.printf("Entering deep sleep for %lu seconds...\n", sleepSeconds);
 
-    // Loop will repeat for continuous testing
+    // Turn off display before sleep
+#ifdef OLED_ENABLED
+    displayOff();
+#endif
+
+    // Enter deep sleep (will wake and restart)
+    enterDeepSleep(sleepSeconds);
+    
+    // Code below never runs - device restarts after deep sleep
 }

@@ -23,7 +23,8 @@ void initDisplay() {
     // Ensure peripherals are powered (Heltec V3: OLED is on VEXT)
     // Note: VEXT might already be on from LoRa init, but we ensure it here
     pinMode(VEXT_CTRL, OUTPUT);
-    digitalWrite(VEXT_CTRL, LOW);
+    digitalWrite(VEXT_CTRL, LOW);  // LOW = ON
+    delay(100);  // Allow VEXT power to stabilize after deep sleep
     
     // Manually reset OLED
     pinMode(OLED_RST, OUTPUT);
@@ -48,7 +49,7 @@ void initDisplay() {
     // Create display instance
     // Configure U8g2 to use the existing Wire instance (initialized above)
     // We pass U8X8_PIN_NONE for clock/data to prevent U8g2 from re-initializing Wire with defaults
-    display = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R0, OLED_RST);
+    display = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R2, OLED_RST);
     
     // Set I2C address
     display->setI2CAddress(OLED_ADDR * 2); // U8g2 uses 8-bit address
@@ -192,7 +193,7 @@ void displayConfig(uint32_t sleepSeconds, uint32_t intervalSeconds, uint32_t wak
     
     // Title
     display->setFont(u8g2_font_ncenB08_tr);
-    display->drawStr(35, 12, "Config");
+    display->drawStr(20, 12, "LoRa Config");
     
     // Settings
     display->setFont(u8g2_font_5x7_tf);
@@ -279,6 +280,15 @@ void clearDisplay() {
     display->sendBuffer();
 }
 
+/**
+ * Turn off display (power save mode)
+ */
+void displayOff() {
+    if (display == nullptr) return;
+    display->setPowerSave(1);  // Turn off display
+    Serial.println("[DISPLAY] Power save enabled");
+}
+
 #else
 
 // Stub implementations when OLED is disabled
@@ -290,5 +300,6 @@ void displayError(const char* error) {}
 void displayGPS(uint8_t satellites, bool hasFix, double latitude, double longitude, double altitude, float hdop) {}
 void updateTxStats(uint32_t count, int16_t rssi) {}
 void clearDisplay() {}
+void displayOff() {}
 
 #endif // OLED_ENABLED
