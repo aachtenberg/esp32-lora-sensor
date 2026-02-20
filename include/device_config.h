@@ -65,7 +65,7 @@
 // Battery voltage divider calibration
 // Heltec V3 has internal voltage divider (approx 4.9:1 ratio based on 100K/390K)
 #define BATTERY_VOLTAGE_MULTIPLIER 4.9
-#define BATTERY_CALIBRATION 1.0       // Adjust if readings are off
+#define BATTERY_CALIBRATION 1.03      // Adjust if readings are off
 #define BATTERY_ADC_REFERENCE 3.3     // ESP32 ADC reference voltage
 #define BATTERY_ADC_RESOLUTION 4095.0 // 12-bit ADC
 

@@ -473,6 +473,28 @@ bool processCommand(CommandPayload* cmd) {
             break;
         }
         
+        case CMD_SET_NAME: {
+            // Set device name - expects string (max 31 chars)
+            if (cmd->paramLen > 0 && cmd->paramLen <= 31) {
+                // Ensure null termination
+                char newName[32];
+                memcpy(newName, cmd->params, cmd->paramLen);
+                newName[cmd->paramLen] = '\0';
+                
+                Serial.printf("  Parameters: \"%s\"\n", newName);
+                setDeviceName(String(newName));
+                
+                char eventMsg[64];
+                snprintf(eventMsg, sizeof(eventMsg), "Device renamed to: %s", newName);
+                sendEventMessage(EVENT_CONFIG_CHANGE, SEVERITY_INFO, eventMsg);
+                
+                success = true;
+            } else {
+                Serial.printf("  ❌ Invalid name length: %d (valid: 1-31)\n", cmd->paramLen);
+            }
+            break;
+        }
+        
         default:
             Serial.printf("  ⚠️  Unknown command type: 0x%02X\n", cmd->cmdType);
     }

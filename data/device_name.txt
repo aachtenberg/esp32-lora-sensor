@@ -1,1 +1,1 @@
-DS18B20-LoRa-001
+LoRa-Solar-2

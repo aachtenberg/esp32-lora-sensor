@@ -3,8 +3,8 @@
 
 // Configuration variables
 static String deviceName = "ESP32-LoRa";
-static uint32_t deepSleepSeconds = 900;  // 15 minutes default
-static uint16_t sensorIntervalSeconds = 900;  // Same as deep sleep for simple sensors
+static uint32_t deepSleepSeconds = 90;  // 90 seconds default
+static uint16_t sensorIntervalSeconds = 90;  // Same as deep sleep for simple sensors
 static float pressureBaseline = 0.0;
 
 // File paths in LittleFS
