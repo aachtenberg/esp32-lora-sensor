@@ -115,7 +115,8 @@ void loop() {
     // Update GPS and collect location data (if available)
     Serial.println("Updating GPS location...");
     GPSData gpsData;
-    updateGPS(&gpsData);
+    getGPSData(&gpsData);  // Initialize with last known state (avoids garbage values)
+    updateGPS(&gpsData);   // Update with any new data from GPS module
     
     // Add GPS data to readings (even if no fix - shows 0,0 when invalid)
     if (gpsData.hasfix) {

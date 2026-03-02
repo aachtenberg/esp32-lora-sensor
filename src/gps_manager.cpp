@@ -72,6 +72,9 @@ bool initGPS() {
  * Returns true if new fix acquired this call
  */
 bool updateGPS(GPSData* data) {
+    // Initialize output with last known good state (prevents garbage values)
+    *data = currentGPS;
+    
     bool newFix = false;
     int bytesRead = 0;
     int sentencesDecoded = 0;
