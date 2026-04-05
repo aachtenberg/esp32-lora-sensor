@@ -143,33 +143,56 @@ static DHT dht22(DHT22_PIN, DHT22);
 
 // Forward declaration
 static void resetDHT22();
+static bool readDHT22(float* tempC, float* humidity, uint8_t attempts, uint32_t delayMs);
+
+static bool readDHT22(float* tempC, float* humidity, uint8_t attempts, uint32_t delayMs) {
+    if (tempC == nullptr || humidity == nullptr) {
+        return false;
+    }
+
+    for (uint8_t attempt = 0; attempt < attempts; attempt++) {
+        if (attempt > 0) {
+            delay(delayMs);
+        }
+
+        *humidity = dht22.readHumidity();
+        *tempC = dht22.readTemperature();
+
+        if (!isnan(*tempC) && !isnan(*humidity)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 static void resetDHT22() {
-    Serial.println("[SENSOR] Resetting DHT22 power...");
-    digitalWrite(VEXT_CTRL, HIGH); // Power off
-    delay(500);  // DHT22 needs longer recovery time
-    digitalWrite(VEXT_CTRL, LOW);  // Power on
-    delay(1000); // DHT22 needs 1 second to stabilize
+    Serial.println("[SENSOR] Resetting DHT22 interface...");
+    pinMode(DHT22_PIN, INPUT_PULLUP);
+    delay(2500);  // Respect the DHT22 minimum recovery/sample period
     dht22.begin();
+    delay(2500);
 }
 
 bool initSensor() {
     Serial.println("[SENSOR] Initializing DHT22...");
 
+    pinMode(DHT22_PIN, INPUT_PULLUP);
     dht22.begin();
-    delay(2000);  // DHT22 needs 2 seconds initial stabilization
+    delay(2500);  // DHT22 needs time to stabilize after boot
 
     // Try a test read to verify sensor is connected
-    float testTemp = dht22.readTemperature();
-    if (isnan(testTemp)) {
+    float testTemp = NAN;
+    float testHumidity = NAN;
+    if (!readDHT22(&testTemp, &testHumidity, 2, 2500)) {
         Serial.printf("[SENSOR] ERROR: DHT22 not responding on GPIO%d!\n", DHT22_PIN);
         Serial.println("[SENSOR] Check wiring: Data pin to GPIO, VCC to 3.3V, GND to GND");
-        Serial.println("[SENSOR] Note: DHT22 has built-in pull-up, no external resistor needed");
+        Serial.println("[SENSOR] Note: many DHT22 modules have a pull-up, but a bare sensor needs an external resistor");
         return false;
     }
 
     Serial.printf("[SENSOR] DHT22 initialized on GPIO%d\n", DHT22_PIN);
-    Serial.printf("[SENSOR] Test reading: %.2f°C\n", testTemp);
+    Serial.printf("[SENSOR] Test reading: %.2f°C, %.2f%%\n", testTemp, testHumidity);
 
     return true;
 }
@@ -182,22 +205,18 @@ bool readSensorData(ReadingsPayload* readings) {
 
     // Read temperature and humidity
     // Note: DHT22 has 2-second minimum sampling period
-    float tempC = dht22.readTemperature();
-    float humidity = dht22.readHumidity();
+    float tempC = NAN;
+    float humidity = NAN;
 
     // Check for read errors
-    if (isnan(tempC) || isnan(humidity)) {
+    if (!readDHT22(&tempC, &humidity, 2, 2500)) {
         Serial.println("[SENSOR] ERROR: DHT22 read failed (NaN)");
         sensorFailures++;
 
         // Attempt recovery
         resetDHT22();
-        delay(2000);  // Wait for sensor to stabilize
-        
-        tempC = dht22.readTemperature();
-        humidity = dht22.readHumidity();
 
-        if (isnan(tempC) || isnan(humidity)) {
+        if (!readDHT22(&tempC, &humidity, 2, 2500)) {
             Serial.println("[SENSOR] ERROR: Recovery failed");
             sendEventMessage(EVENT_SENSOR_ERROR, SEVERITY_ERROR, "DHT22 read failed - recovery failed");
             return false;

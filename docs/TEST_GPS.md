@@ -15,9 +15,11 @@ NEO-6M GPS → ESP32 LoRa V3
 ───────────────────────────
 VCC (3.3V) → 3V
 GND        → GND
-TX         → GPIO3 (ESP32 RX)
-RX         → GPIO1 (ESP32 TX)
+TX         → GPIO46 (ESP32 RX)
+RX         → GPIO45 (ESP32 TX)
 ```
+
+Use the GPIO numbers printed on the Heltec V3 board. The current firmware configuration is `GPS_RX_PIN=46` and `GPS_TX_PIN=45`.
 
 ## Quick Test
 
@@ -110,8 +112,8 @@ Your GPS module has TX/RX pins mislabeled!
 **Solution:**
 - Some GPS modules have mislabeled TX/RX pins
 - Physically swap the connections:
-  - GPS TX → GPIO1 (instead of GPIO3)
-  - GPS RX → GPIO3 (instead of GPIO1)
+  - GPS TX → GPIO45 (instead of GPIO46)
+  - GPS RX → GPIO46 (instead of GPIO45)
 - Update `device_config.h` if needed
 
 ### Issue 4: No Satellite Fix

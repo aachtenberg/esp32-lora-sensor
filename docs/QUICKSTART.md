@@ -27,7 +27,7 @@ SCL → GPIO26
 DHT22 → ESP32
 VCC → 3V
 GND → GND
-DATA → GPIO2
+DATA → GPIO4
 ```
 
 ### DS18B20 (Temperature Only)

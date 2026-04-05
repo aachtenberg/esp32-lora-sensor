@@ -13,8 +13,8 @@ void displayStartup(const char* version);
 // Display sensor readings
 void displayReadings(const ReadingsPayload* readings);
 
-// Display configuration and status
-void displayConfig(uint32_t sleepSeconds, uint32_t intervalSeconds, uint32_t wakeCount);
+// Display battery status
+void displayBattery(uint16_t batteryVoltageMv, uint8_t batteryPercent);
 
 // Display GPS information (satellites, fix status, coordinates)
 void displayGPS(uint8_t satellites, bool hasFix, double latitude, double longitude, double altitude, float hdop);

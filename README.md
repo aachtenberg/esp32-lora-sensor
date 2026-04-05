@@ -17,7 +17,7 @@ Battery-powered environmental sensor using LoRa communication. Supports **BME280
 | Sensor | Build Environment | Readings | Notes |
 |--------|-------------------|----------|-------|
 | **BME280** | `esp32-lora-sensor` (default) | Temperature, humidity, pressure, altitude | - |
-| **DHT22/AM2302** | `esp32-lora-sensor-dht22` | Temperature, humidity | Uses GPIO1 (TX), minimal impact on serial debugging |
+| **DHT22/AM2302** | `esp32-lora-sensor-dht22` | Temperature, humidity | Uses GPIO4 |
 | **DS18B20** | `esp32-lora-sensor-ds18b20` | Temperature only | - |
 
 ## Features
@@ -61,11 +61,11 @@ DS18B20 Sensor (1-Wire - external):
   Data = GPIO 4 (with 4.7K pull-up to 3.3V)
 
 DHT22 Sensor (1-Wire - external):
-  Data = GPIO 2
+  Data = GPIO 4
 
 GPS Module (UART1 - optional, requires GPS_ENABLED flag):
-  RX = GPIO 3 (connects to GPS TX)
-  TX = GPIO 1 (connects to GPS RX)
+  RX = GPIO 46 (connects to GPS TX)
+  TX = GPIO 45 (connects to GPS RX)
 
 Vext Control: GPIO 36 (LOW = peripherals ON)
 Battery ADC: GPIO 36 (shared with Vext)
@@ -203,7 +203,7 @@ Uses binary packet protocol defined in [lib/LoRaProtocol/lora_protocol.h](lib/Lo
 
 **GPS Support** (optional):
 - Enabled with `-D GPS_ENABLED` build flag
-- Uses NEO-6M GPS module on UART1 (GPIO1/GPIO3)
+- Uses NEO-6M GPS module on UART1 (GPIO45/GPIO46)
 - GPS fields included in all readings packets (zeroed when GPS disabled or no fix)
 - Fields: latitude, longitude, altitude, satellite count, HDOP
 
@@ -276,7 +276,7 @@ pio run -t clean
 ### Sensor Issues
 - **BME280:** Check I2C wiring (GPIO33/26), verify address (0x76 or 0x77)
 - **DS18B20:** Verify 4.7K pull-up resistor on GPIO4
-- **DHT22:** Check GPIO2 connection, ensure 2s stabilization time
+- **DHT22:** Check GPIO4 connection, ensure 2s stabilization time
 - **GPS:** Run `test_gps_pins.cpp` diagnostic, verify clear sky view
 
 ### LoRa Issues

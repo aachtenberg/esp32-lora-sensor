@@ -2,8 +2,8 @@
  * GPS Pin Diagnostic Test
  * 
  * This test helps diagnose GPS wiring issues by:
- * 1. Monitoring GPIO3 (GPS TX -> ESP32 RX) for incoming data
- * 2. Sending test data on GPIO1 (ESP32 TX -> GPS RX)
+ * 1. Monitoring GPIO46 (GPS TX -> ESP32 RX) for incoming data
+ * 2. Sending test data on GPIO45 (ESP32 TX -> GPS RX)
  * 3. Testing with TX/RX swapped in case pins are mislabeled
  * 
  * Upload this, open serial monitor at 115200 baud, and watch output.
@@ -12,8 +12,8 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 
-#define GPS_RX_PIN 3   // ESP32 receives from GPS TX
-#define GPS_TX_PIN 1   // ESP32 transmits to GPS RX
+#define GPS_RX_PIN 46  // ESP32 receives from GPS TX
+#define GPS_TX_PIN 45  // ESP32 transmits to GPS RX
 
 HardwareSerial gpsSerial(1);
 
@@ -61,7 +61,7 @@ void testBaudRate(uint32_t baud, int duration_ms) {
 
 void testSwappedPins(uint32_t baud, int duration_ms) {
     Serial.printf("\n=== Testing SWAPPED pins at %d baud ===\n", baud);
-    Serial.println("(GPS TX -> GPIO1, GPS RX -> GPIO3)");
+    Serial.println("(GPS TX -> GPIO45, GPS RX -> GPIO46)");
     
     gpsSerial.end();
     delay(100);
@@ -103,8 +103,8 @@ void setup() {
     Serial.println("==========================================");
     Serial.println("Hardware: NEO-6M GPS Module");
     Serial.println("Expected wiring:");
-    Serial.println("  GPS TX -> ESP32 GPIO3 (RX)");
-    Serial.println("  GPS RX -> ESP32 GPIO1 (TX)");
+    Serial.println("  GPS TX -> ESP32 GPIO46 (RX)");
+    Serial.println("  GPS RX -> ESP32 GPIO45 (TX)");
     Serial.println("  GPS VCC -> 3.3V");
     Serial.println("  GPS GND -> GND");
     Serial.println("==========================================\n");

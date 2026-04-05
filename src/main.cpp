@@ -47,10 +47,10 @@ void setup() {
     // Check if user wants to enter config mode
     checkSerialConfig();
 
-    // Initialize BME280 sensor
-    Serial.println("\nInitializing BME280 sensor...");
+    // Initialize selected sensor
+    Serial.println("\nInitializing sensor...");
     if (!initSensor()) {
-        Serial.println("ERROR: BME280 initialization failed!");
+        Serial.println("ERROR: Sensor initialization failed!");
         // TODO: Store error and retry on next wake
     }
 
@@ -98,11 +98,12 @@ void loop() {
 
     // Read sensor data
     Serial.println("Reading sensor data...");
-    ReadingsPayload readings;
-    if (!readSensorData(&readings)) {
+    ReadingsPayload readings = {};
+    bool sensorReadOk = readSensorData(&readings);
+    if (!sensorReadOk) {
         Serial.println("ERROR: Failed to read sensor data");
-        // TODO: Increment error counter
-        // For now, continue with invalid data marked
+        readings.timestamp = millis() / 1000;
+        readings.pressureTrend = 1;
     }
 
     // Read battery status
@@ -156,59 +157,67 @@ void loop() {
 
     // Display on OLED (if enabled)
 #ifdef OLED_ENABLED
-    displayReadings(&readings);
-#endif
-
-    // Build LoRa packet
-    Serial.println("Building LoRa packet...");
-    uint8_t packet[sizeof(LoRaPacketHeader) + sizeof(ReadingsPayload)];
-    LoRaPacketHeader* header = (LoRaPacketHeader*)packet;
-
-    initHeader(header, MSG_READINGS, g_deviceId, g_sequenceNumber++,
-               sizeof(ReadingsPayload));
-
-    memcpy(packet + sizeof(LoRaPacketHeader), &readings, sizeof(ReadingsPayload));
-
-    // Transmit via LoRa with retries
-    uint32_t txStartMs = millis();
-    Serial.printf("[%lu] Transmitting packet...\n", txStartMs);
-    bool txSuccess = transmitPacket(packet, sizeof(packet));
-    uint32_t txEndMs = millis();
-
-    if (txSuccess) {
-        Serial.printf("[%lu] ✅ Transmission successful! (took %lums)\n", txEndMs, txEndMs - txStartMs);
-        
-        // Update display with TX stats
-#ifdef OLED_ENABLED
-        updateTxStats(g_sequenceNumber, getLastRSSI());
+    if (sensorReadOk) {
         displayReadings(&readings);
+    } else {
+        displayError("Sensor Read Failed");
+    }
 #endif
 
-        // Wait for ACK from gateway (unless battery critical)
-        if (readings.batteryPercent > BATTERY_CRITICAL_PERCENT) {
-            Serial.printf("[%lu] Waiting for ACK...\n", millis());
-            if (waitForAck(LORA_ACK_TIMEOUT_MS)) {
-                Serial.printf("[%lu] ACK received!\n", millis());
+    if (sensorReadOk) {
+        // Build LoRa packet
+        Serial.println("Building LoRa packet...");
+        uint8_t packet[sizeof(LoRaPacketHeader) + sizeof(ReadingsPayload)];
+        LoRaPacketHeader* header = (LoRaPacketHeader*)packet;
+
+        initHeader(header, MSG_READINGS, g_deviceId, g_sequenceNumber++,
+                   sizeof(ReadingsPayload));
+
+        memcpy(packet + sizeof(LoRaPacketHeader), &readings, sizeof(ReadingsPayload));
+
+        // Transmit via LoRa with retries
+        uint32_t txStartMs = millis();
+        Serial.printf("[%lu] Transmitting packet...\n", txStartMs);
+        bool txSuccess = transmitPacket(packet, sizeof(packet));
+        uint32_t txEndMs = millis();
+
+        if (txSuccess) {
+            Serial.printf("[%lu] ✅ Transmission successful! (took %lums)\n", txEndMs, txEndMs - txStartMs);
+            
+            // Update display with TX stats
 #ifdef OLED_ENABLED
-                displayStatus("ACK OK!");
-                delay(1000);
+            updateTxStats(g_sequenceNumber, getLastRSSI());
+            displayReadings(&readings);
 #endif
+
+            // Wait for ACK from gateway (unless battery critical)
+            if (readings.batteryPercent > BATTERY_CRITICAL_PERCENT) {
+                Serial.printf("[%lu] Waiting for ACK...\n", millis());
+                if (waitForAck(LORA_ACK_TIMEOUT_MS)) {
+                    Serial.printf("[%lu] ACK received!\n", millis());
+#ifdef OLED_ENABLED
+                    displayStatus("ACK OK!");
+                    delay(1000);
+#endif
+                } else {
+                    Serial.printf("[%lu] No ACK received (timeout)\n", millis());
+#ifdef OLED_ENABLED
+                    displayStatus("No ACK");
+                    delay(1000);
+#endif
+                }
             } else {
-                Serial.printf("[%lu] No ACK received (timeout)\n", millis());
-#ifdef OLED_ENABLED
-                displayStatus("No ACK");
-                delay(1000);
-#endif
+                Serial.printf("[%lu] Battery critical - skipping ACK wait\n", millis());
             }
         } else {
-            Serial.printf("[%lu] Battery critical - skipping ACK wait\n", millis());
+            Serial.printf("[%lu] ERROR: All transmission attempts failed!\n", millis());
+#ifdef OLED_ENABLED
+            displayError("TX Failed!");
+            delay(2000);
+#endif
         }
     } else {
-        Serial.printf("[%lu] ERROR: All transmission attempts failed!\n", millis());
-#ifdef OLED_ENABLED
-        displayError("TX Failed!");
-        delay(2000);
-#endif
+        Serial.println("Skipping readings transmit due to sensor read failure");
     }
 
     // Check for incoming commands from gateway
@@ -227,10 +236,10 @@ void loop() {
         ESP.restart();
     }
 
-    // Display configuration screen briefly
+    // Display battery screen briefly
 #ifdef OLED_ENABLED
-    displayConfig(getDeepSleepSeconds(), getSensorIntervalSeconds(), g_wakeCount);
-    delay(5000);  // Show config for 5 seconds
+    displayBattery(readings.batteryVoltage, readings.batteryPercent);
+    delay(5000);  // Show battery screen for 5 seconds
     displayReadings(&readings);  // Switch back to readings
 #endif
 

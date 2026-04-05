@@ -1,4 +1,4 @@
-# ESP32 LoRa Sensor - Wiring Guide
+# ESP32 LoRa Sensor - Wiring Guide  
 
 ## Hardware
 - **Heltec WiFi LoRa 32 V3** (ESP32-S3, SX1262, 0.96" OLED)
@@ -8,6 +8,19 @@
 ## Pin Configuration Summary
 
 Based on the **Heltec WiFi LoRa 32 V3 (ESP32-S3)** pinout:
+
+### External Pinout Used By This Project
+
+Use the GPIO labels printed on the Heltec V3 board when wiring external modules.
+
+| Module | Signal | Heltec V3 GPIO | Notes |
+|--------|--------|----------------|-------|
+| BME280 | SDA    | GPIO33         | External I2C data |
+| BME280 | SCL    | GPIO26         | External I2C clock |
+| GPS    | TX to ESP32 RX | GPIO46 | GPS module TX connects here |
+| GPS    | RX from ESP32 TX | GPIO45 | GPS module RX connects here |
+| Power  | 3V3    | 3V             | Use 3.3V only |
+| Power  | GND    | GND            | Common ground for all modules |
 
 ### LoRa SX1262 (Built-in - No wiring needed)
 | Function | GPIO | Notes |
@@ -87,21 +100,21 @@ DHT22/AM2302 → ESP32 LoRa V3
 ─────────────────────────────
 VCC (3.3V)  → 3V
 GND         → GND
-DATA        → GPIO2
+DATA        → GPIO4
 ```
 
 **Pin assignment in code:**
-- DHT22_PIN: GPIO 2
+- DHT22_PIN: GPIO 4
 
 **⚠️ Important Notes:**
-- GPIO2 is a general-purpose GPIO, suitable for 1-Wire communication
+- GPIO4 is a general-purpose GPIO, suitable for DHT22 communication
 - DHT22 sensors have a built-in pull-up resistor, so no external resistor is needed
 - If using a bare DHT22 chip (not a breakout module), add a 10K pull-up resistor between DATA and VCC
 
 **Important timing notes:**
 - DHT22 requires 2 seconds initial stabilization after power-on
 - Minimum 2-second interval between readings
-- Serial debugging works normally (GPIO2 doesn't conflict with serial)
+- Serial debugging works normally (GPIO4 doesn't conflict with serial)
 - Power cycling requires 500ms off + 1 second stabilization
 
 ### GPS Module (Optional - Requires GPS_ENABLED flag)
@@ -113,17 +126,18 @@ NEO-6M GPS → ESP32 LoRa V3
 ──────────────────────────
 VCC (3.3V) → 3V
 GND        → GND
-TX         → GPIO3 (ESP32 RX)
-RX         → GPIO1 (ESP32 TX)
+TX         → GPIO46 (ESP32 RX)
+RX         → GPIO45 (ESP32 TX)
 ```
 
 **Pin assignments in code:**
-- GPS_RX_PIN: GPIO 3 (ESP32 receives from GPS TX)
-- GPS_TX_PIN: GPIO 1 (ESP32 transmits to GPS RX)
+- GPS_RX_PIN: GPIO 46 (ESP32 receives from GPS TX)
+- GPS_TX_PIN: GPIO 45 (ESP32 transmits to GPS RX)
 
 **⚠️ Important Notes:**
 - GPS must be enabled with `-D GPS_ENABLED` build flag
 - Uses UART1 for communication at 9600 baud
+- Match by GPIO number on the Heltec V3 silk screen, not by older ESP32 UART0 examples
 - GPS needs clear view of sky to acquire satellite fix
 - Initial fix can take 30 seconds to several minutes
 - When GPS is disabled, GPS fields in readings are set to zero
@@ -214,13 +228,13 @@ If you experience "sensor not found" errors, try changing the address in `device
 ### DHT22 not detected
 
 1. **Check wiring:**
-   - Verify data pin is connected to GPIO 2
+   - Verify data pin is connected to GPIO 4
    - Check power connections (3.3V and GND)
    - Note: Most DHT22 modules have built-in pull-up resistor
 
 2. **Serial debugging:**
-   - GPIO2 doesn't conflict with serial, so debugging works normally
-   - This is why GPIO2 is preferred over GPIO1 (which is TX pin)
+   - GPIO4 doesn't conflict with serial, so debugging works normally
+   - This keeps the DHT22 off the dedicated GPS UART pins
 
 3. **Timing requirements:**
    - DHT22 needs 2 seconds to stabilize after power-on
@@ -285,17 +299,17 @@ If OLED doesn't work:
 | 17   | OLED SDA | Used (built-in) |
 | 18   | OLED SCL | Used (built-in) |
 | 21   | OLED RST | Used (built-in) |
-| 1    | GPS TX (UART1)| **Used (external, GPS build)** |
-| 3    | GPS RX (UART1)| **Used (external, GPS build)** |
-| 2    | DHT22 Data | **Used (external, DHT22 build)** |
+| 4    | DHT22 Data | **Used (external, DHT22 build)** |
 | 4    | DS18B20 Data | **Used (external, DS18B20 build)** |
 | 26   | BME280 SCL| **Used (external, BME280 build)** |
 | 33   | BME280 SDA| **Used (external, BME280 build)** |
+| 45   | GPS TX (UART1)| **Used (external, GPS build)** |
+| 46   | GPS RX (UART1)| **Used (external, GPS build)** |
 | 36   | Battery ADC | **Used (optional)** |
 
-**Note:** GPIO usage depends on which sensor build is active (BME280, DHT22, DS18B20, or GPS). Multiple sensors can coexist if GPIO pins don't conflict (e.g., GPS + DHT22 on pins 1,3,2 respectively).
+**Note:** GPIO usage depends on which sensor build is active (BME280, DHT22, DS18B20, or GPS). Multiple sensors can coexist if GPIO pins don't conflict (for example, GPS on 45/46 plus DHT22 on 4).
 
-**Available GPIOs for expansion:** 0, 32, 39 (and GPIO 1/2/3/4/26/33 if not using that sensor build)
+**Available GPIOs for expansion:** 0, 32, 39 (and GPIO 2/4/26/33/45/46 if not used by the active build)
 
 ## References
 

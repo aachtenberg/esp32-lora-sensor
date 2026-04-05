@@ -14,6 +14,12 @@ static uint32_t txCount = 0;
 static int16_t lastRssi = 0;
 static uint64_t g_deviceId = 0;  // Device ID passed from main.cpp
 
+static void drawCenteredText(const char* text, int16_t y) {
+    int16_t x = (128 - display->getStrWidth(text)) / 2;
+    if (x < 0) x = 0;
+    display->drawStr(x, y, text);
+}
+
 /**
  * Initialize OLED display
  */
@@ -101,49 +107,19 @@ void displayReadings(const ReadingsPayload* readings) {
     display->clearBuffer();
     char buffer[32];
 
-    // Title - "LoRa Sensor" to match gateway style
     display->setFont(u8g2_font_5x7_tf);
-    display->drawStr(0, 7, "LoRa Sensor");
+    drawCenteredText("TEMP", 7);
 
-    // Device ID next to title
-    snprintf(buffer, sizeof(buffer), "ID:%04llX", (unsigned long long)(g_deviceId & 0xFFFF));
-    display->drawStr(80, 7, buffer);
-
-    // Temperature (large)
-    display->setFont(u8g2_font_ncenB08_tr);
+    display->setFont(u8g2_font_logisoso18_tr);
     snprintf(buffer, sizeof(buffer), "%.1fC", readings->temperature / 100.0);
-    display->drawStr(0, 19, buffer);
+    drawCenteredText(buffer, 31);
 
-    // Humidity (next to temp)
-    snprintf(buffer, sizeof(buffer), "H:%.0f%%", readings->humidity / 100.0);
-    display->drawStr(60, 19, buffer);
-
-    // Pressure with trend indicator
-    display->setFont(u8g2_font_6x10_tr);
-    const char* trendSymbol = "-";  // Steady
-    if (readings->pressureTrend == 2) trendSymbol = "^";      // Rising
-    else if (readings->pressureTrend == 0) trendSymbol = "v"; // Falling
-
-    snprintf(buffer, sizeof(buffer), "P:%.0f%s", readings->pressure / 100.0, trendSymbol);
-    display->drawStr(0, 31, buffer);
-
-    // Pressure change from baseline (if baseline is set)
-    if (readings->pressureChange != 0) {
-        snprintf(buffer, sizeof(buffer), "%+.1fhPa", readings->pressureChange / 100.0);
-        display->drawStr(65, 31, buffer);
-    }
-
-    // Battery voltage and percent
     display->setFont(u8g2_font_5x7_tf);
-    snprintf(buffer, sizeof(buffer), "Bat:%.2fV %d%%", readings->batteryVoltage / 1000.0, readings->batteryPercent);
-    display->drawStr(0, 43, buffer);
+    drawCenteredText("HUMIDITY", 39);
 
-    // TX count and RSSI
-    snprintf(buffer, sizeof(buffer), "TX:%lu RSSI:%ddBm", txCount, lastRssi);
-    display->drawStr(0, 55, buffer);
-
-    // LoRa frequency
-    display->drawStr(0, 64, "915MHz");
+    display->setFont(u8g2_font_logisoso18_tr);
+    snprintf(buffer, sizeof(buffer), "%.0f%%", readings->humidity / 100.0);
+    drawCenteredText(buffer, 63);
 
     display->sendBuffer();
 }
@@ -183,35 +159,23 @@ void setDisplayDeviceId(uint64_t deviceId) {
 /**
  * Display configuration and status
  */
-void displayConfig(uint32_t sleepSeconds, uint32_t intervalSeconds, uint32_t wakeCount) {
+void displayBattery(uint16_t batteryVoltageMv, uint8_t batteryPercent) {
     if (display == nullptr) return;
-    
+
     display->clearBuffer();
-    display->setFont(u8g2_font_5x7_tf);
-    
     char buffer[32];
-    
-    // Title
-    display->setFont(u8g2_font_ncenB08_tr);
-    display->drawStr(20, 12, "LoRa Config");
-    
-    // Settings
+
     display->setFont(u8g2_font_5x7_tf);
-    snprintf(buffer, sizeof(buffer), "Sleep:%lds", sleepSeconds);
-    display->drawStr(0, 24, buffer);
-    
-    snprintf(buffer, sizeof(buffer), "Interval:%lds", intervalSeconds);
-    display->drawStr(0, 34, buffer);
-    
-    snprintf(buffer, sizeof(buffer), "Wake:%lu", wakeCount);
-    display->drawStr(0, 44, buffer);
-    
-    snprintf(buffer, sizeof(buffer), "Heap:%lu KB", ESP.getFreeHeap() / 1024);
-    display->drawStr(0, 54, buffer);
-    
-    // Status indicator
-    display->drawStr(0, 64, "Ready");
-    
+    drawCenteredText("BATTERY", 7);
+
+    display->setFont(u8g2_font_logisoso20_tr);
+    snprintf(buffer, sizeof(buffer), "%u%%", batteryPercent);
+    drawCenteredText(buffer, 36);
+
+    display->setFont(u8g2_font_helvB12_tr);
+    snprintf(buffer, sizeof(buffer), "%.2fV", batteryVoltageMv / 1000.0);
+    drawCenteredText(buffer, 61);
+
     display->sendBuffer();
 }
 void updateTxStats(uint32_t count, int16_t rssi) {
@@ -295,6 +259,7 @@ void displayOff() {
 void initDisplay() {}
 void displayStartup(const char* version) {}
 void displayReadings(const ReadingsPayload* readings) {}
+void displayBattery(uint16_t batteryVoltageMv, uint8_t batteryPercent) {}
 void displayStatus(const char* message) {}
 void displayError(const char* error) {}
 void displayGPS(uint8_t satellites, bool hasFix, double latitude, double longitude, double altitude, float hdop) {}
