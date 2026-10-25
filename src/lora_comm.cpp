@@ -300,7 +300,12 @@ bool checkForCommands(uint16_t timeout_ms) {
                         Serial.printf("[%lu]   Header valid: Type=0x%02X\n", millis(), header->msgType);
                         
                         // Check if it's a command
-                        if (header->msgType == MSG_COMMAND) {
+                        if (header->msgType == MSG_COMMAND && header->deviceId != deviceId) {
+                            // Command addressed to another sensor - ignore and keep listening
+                            Serial.printf("[%lu]   ⚠️  Command for 0x%016llX, not us (0x%016llX) - ignoring\n",
+                                         millis(), header->deviceId, deviceId);
+                            radio->startReceive();
+                        } else if (header->msgType == MSG_COMMAND) {
                             // Validate we received the full payload (use header's payloadLen, not full struct size)
                             if (rxLen >= sizeof(LoRaPacketHeader) + header->payloadLen) {
                                 CommandPayload* cmd = (CommandPayload*)(rxBuffer + sizeof(LoRaPacketHeader));
